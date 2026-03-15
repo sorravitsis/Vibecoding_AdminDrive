@@ -1,0 +1,159 @@
+.files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+  font-size: 14px;
+}
+
+.breadcrumb span {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.breadcrumb span:hover {
+  color: #646cff;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-primary, .btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-primary {
+  background: #646cff;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #535bf2;
+}
+
+.btn-secondary {
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #444;
+}
+
+.btn-secondary:hover {
+  background: #333;
+}
+
+.files-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-header {
+  display: grid;
+  grid-template-columns: 2fr 100px 150px 50px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.grid-row {
+  display: grid;
+  grid-template-columns: 2fr 100px 150px 50px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #222;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.grid-row:hover {
+  background: #2a2a2a;
+}
+
+.col-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-folder { color: #fcc419; }
+.icon-file { color: #888; }
+
+.col-size, .col-date {
+  color: #666;
+  font-size: 14px;
+}
+
+.action-menu {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  color: #666;
+}
+
+.action-menu:hover .dropdown {
+  display: block;
+}
+
+.dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  min-width: 150px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+
+.dropdown button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: #eee;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropdown button:hover {
+  background: #333;
+}
+
+.dropdown button.delete {
+  color: #dc3545;
+}
+
+.dropdown button.delete:hover {
+  background: #dc354511;
+}
+
+.loading, .empty-state {
+  padding: 60px;
+  text-align: center;
+  color: #666;
+}

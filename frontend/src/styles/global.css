@@ -1,0 +1,58 @@
+:root {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #121212;
+  color: #e0e0e0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.main-wrapper {
+  flex: 1;
+  margin-left: 260px; /* Sidebar width */
+  display: flex;
+  flex-direction: column;
+}
+
+.content-area {
+  margin-top: 72px; /* Header height */
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+  background-color: #121212;
+}
+
+.page-content {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 24px;
+  min-height: calc(100vh - 72px - 64px - 48px);
+  border: 1px solid #333;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}

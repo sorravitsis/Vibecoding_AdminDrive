@@ -1,0 +1,150 @@
+.users-header {
+  margin-bottom: 32px;
+}
+
+.users-header h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.users-header p {
+  margin: 8px 0 0 0;
+  color: #888;
+  font-size: 14px;
+}
+
+.users-table-container {
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.users-table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.users-table td {
+  padding: 16px;
+  border-bottom: 1px solid #222;
+  vertical-align: middle;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-placeholder {
+  width: 32px;
+  height: 32px;
+  background: #333;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+}
+
+.user-info-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #fff;
+}
+
+.user-email {
+  font-size: 12px;
+  color: #666;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.active {
+  background: #28a74522;
+  color: #28a745;
+}
+
+.status-badge.suspended {
+  background: #dc354522;
+  color: #dc3545;
+}
+
+.storage-cell {
+  width: 150px;
+}
+
+.storage-text {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.mini-progress {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  margin-bottom: 4px;
+}
+
+.mini-fill {
+  height: 100%;
+  background: #646cff;
+  border-radius: 2px;
+}
+
+.storage-detail {
+  font-size: 11px;
+  color: #555;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  background: none;
+  border: 1px solid #333;
+  color: #666;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+.action-btn.suspend:hover {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.action-btn.activate:hover {
+  border-color: #28a745;
+  color: #28a745;
+}

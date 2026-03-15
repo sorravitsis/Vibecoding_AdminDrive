@@ -1,0 +1,59 @@
+.main-header {
+  height: 72px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: fixed;
+  top: 0;
+  left: 260px;
+  right: 0;
+  z-index: 100;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: #fff;
+}
+
+.header-right {
+  width: 320px;
+}
+
+.quota-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quota-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #888;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #646cff;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.warning {
+  background: #ffc107;
+}
+
+.progress-fill.danger {
+  background: #dc3545;
+}
