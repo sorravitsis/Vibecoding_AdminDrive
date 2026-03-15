@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: admin-drive-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-admin_drive}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-my_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    container_name: admin-drive-api
+    restart: always
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-admin_drive}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-my_secure_password}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_here}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-your_webhook_secret_here}
+    volumes:
+      - ./backend/src/config/service-account.json:/app/src/config/service-account.json
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build: ./frontend
+    container_name: admin-drive-web
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
