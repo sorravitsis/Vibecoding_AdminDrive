@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   UserX, 
   UserCheck, 
-  HardDrive, 
   Shield, 
-  Mail,
   MoreVertical
 } from 'lucide-react';
 import api from '../utils/api';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { File, RotateCcw, Trash2, Clock, User } from 'lucide-react';
+import { File, RotateCcw, Clock, User } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/files.css';
 
