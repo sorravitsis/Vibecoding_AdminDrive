@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Bell } from 'lucide-react';
+
 import api from '../utils/api';
 import '../styles/header.css';
 
