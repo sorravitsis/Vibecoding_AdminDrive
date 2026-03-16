@@ -50,6 +50,9 @@ app.post('/auth/login', authLimiter, loginValidation, login);
 // Webhook endpoint
 app.post('/webhooks/drive', handleDriveWebhook);
 
+// Health check (no auth)
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
 // Protected routes
 app.use(authMiddleware);
 
@@ -69,9 +72,59 @@ app.put('/admin/users/:userId/suspend', suspendUser);
 app.put('/admin/users/:userId/activate', activateUser);
 app.get('/admin/storage-stats', getStorageStats);
 
-// Health check
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// Auto migrate and seed on startup
+async function startup() {
+  try {
+    const { default: pool } = await import('./config/database.js');
+    const fs = await import('fs');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // Run migrations
+    const migrationsDir = path.join(__dirname, 'database/migrations');
+    const files = fs.readdirSync(migrationsDir).sort();
+    const client = await pool.connect();
+    console.log('Running migrations...');
+    for (const file of files) {
+      if (file.endsWith('.sql')) {
+        const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+        await client.query(sql);
+      }
+    }
+    console.log('Migrations completed!');
+
+    // Seed default users if none exist
+    const { rows } = await client.query('SELECT COUNT(*) FROM users');
+    if (parseInt(rows[0].count) === 0) {
+      console.log('Seeding users...');
+      const bcrypt = await import('bcryptjs');
+      const defaultPassword = await bcrypt.hash('ChangeMe123!', 12);
+      const users = [
+        { email: 'admin@example.com', name: 'System Admin', role: 'admin' },
+        { email: 'manager@example.com', name: 'Dept Manager', role: 'manager' },
+        { email: 'user@example.com', name: 'Regular User', role: 'user' },
+      ];
+      for (const u of users) {
+        await client.query(
+          `INSERT INTO users (email, full_name, role, status, quota_bytes, password_hash)
+           VALUES ($1, $2, $3, 'active', 5368709120, $4)
+           ON CONFLICT (email) DO NOTHING`,
+          [u.email, u.name, u.role, defaultPassword]
+        );
+      }
+      console.log('Seed completed! Default password: ChangeMe123!');
+    }
+    client.release();
+  } catch (err) {
+    console.error('Startup error:', err);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+startup();
