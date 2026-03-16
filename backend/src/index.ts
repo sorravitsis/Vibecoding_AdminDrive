@@ -14,7 +14,10 @@ import {
   listDeletedFiles,
   createFolder,
   downloadFile,
-  shareFile
+  shareFile,
+  shareFolder,
+  renameFile,
+  renameFolder
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage } from './controllers/userController.js';
@@ -67,6 +70,9 @@ app.post('/files/upload', upload.single('file'), uploadFile);
 app.post('/files/folders', createFolder);
 app.get('/files/:fileId/download', downloadFile);
 app.post('/files/:fileId/share', shareFile);
+app.put('/files/:fileId/rename', renameFile);
+app.post('/files/folders/:folderId/share', shareFolder);
+app.put('/files/folders/:folderId/rename', renameFolder);
 app.delete('/files/folders/:folderId', deleteFolder);
 app.delete('/files/:fileId', deleteFile);
 app.post('/files/:fileId/restore', restoreFile);
