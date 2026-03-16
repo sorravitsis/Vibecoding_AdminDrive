@@ -10,6 +10,7 @@ import RecycleBin from './pages/RecycleBin';
 import Login from './pages/Login';
 import Activity from './pages/Activity';
 import UsersManagement from './pages/UsersManagement';
+import Maintenance from './pages/Maintenance';
 
 const ProtectedLayout = ({ children, roles }: { children: React.ReactNode, roles?: string[] }) => {
   const { isAuthenticated, user } = useAuth();
@@ -62,6 +63,12 @@ function AppRoutes() {
       <Route path="/admin/users" element={
         <ProtectedLayout roles={['admin']}>
           <UsersManagement />
+        </ProtectedLayout>
+      } />
+
+      <Route path="/admin/maintenance" element={
+        <ProtectedLayout roles={['admin']}>
+          <Maintenance />
         </ProtectedLayout>
       } />
 

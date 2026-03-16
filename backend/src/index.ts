@@ -4,6 +4,7 @@ import multer from 'multer';
 import os from 'os';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from './middleware/auth.js';
@@ -31,6 +32,9 @@ import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenance
 dotenv.config();
 
 const app = express();
+
+// Gzip compression
+app.use(compression());
 
 // Security headers
 app.use(helmet({

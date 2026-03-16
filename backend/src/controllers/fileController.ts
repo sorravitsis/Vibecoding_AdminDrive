@@ -221,6 +221,7 @@ export const downloadFile = async (req: any, res: Response) => {
 
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.file_name)}"`);
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, no-cache');
     (driveRes.data as any).pipe(res);
 
     await logAction(userId, 'download', 'file', fileId, { file_name: file.file_name });
@@ -256,6 +257,7 @@ export const previewFile = async (req: any, res: Response) => {
 
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.file_name)}"`);
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, max-age=300'); // 5 min cache for previews
     (driveRes.data as any).pipe(res);
   } catch (err: any) {
     console.error('Preview error:', err);
