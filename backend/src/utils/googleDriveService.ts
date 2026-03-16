@@ -1,30 +1,20 @@
 import { google } from 'googleapis';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
 export const getDriveService = () => {
-  let auth;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-    auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: SCOPES,
-    });
-  } else {
-    const KEY_FILE_PATH = path.join(__dirname, '../config/service-account.json');
-    auth = new google.auth.GoogleAuth({
-      keyFile: KEY_FILE_PATH,
-      scopes: SCOPES,
-    });
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Google OAuth2 credentials not configured');
   }
 
-  return google.drive({ version: 'v3', auth });
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+  return google.drive({ version: 'v3', auth: oauth2Client });
 };
 
 export const TARGET_FOLDER_ID = '1MTXX4rnWf7tYsxfyMqSj_-A9x576eDZN';
