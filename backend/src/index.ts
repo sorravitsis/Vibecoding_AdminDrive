@@ -8,6 +8,7 @@ import { authMiddleware } from './middleware/auth.js';
 import {
   uploadFile,
   deleteFile,
+  deleteFolder,
   restoreFile,
   listFiles,
   createFolder
@@ -60,6 +61,7 @@ app.use(authMiddleware);
 app.get('/files', listFiles);
 app.post('/files/upload', upload.single('file'), uploadFile);
 app.post('/files/folders', createFolder);
+app.delete('/files/folders/:folderId', deleteFolder);
 app.delete('/files/:fileId', deleteFile);
 app.post('/files/:fileId/restore', restoreFile);
 
