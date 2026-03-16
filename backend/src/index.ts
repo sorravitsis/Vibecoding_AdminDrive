@@ -12,7 +12,9 @@ import {
   restoreFile,
   listFiles,
   listDeletedFiles,
-  createFolder
+  createFolder,
+  downloadFile,
+  shareFile
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage } from './controllers/userController.js';
@@ -63,6 +65,8 @@ app.get('/files', listFiles);
 app.get('/files/deleted', listDeletedFiles);
 app.post('/files/upload', upload.single('file'), uploadFile);
 app.post('/files/folders', createFolder);
+app.get('/files/:fileId/download', downloadFile);
+app.post('/files/:fileId/share', shareFile);
 app.delete('/files/folders/:folderId', deleteFolder);
 app.delete('/files/:fileId', deleteFile);
 app.post('/files/:fileId/restore', restoreFile);

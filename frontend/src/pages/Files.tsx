@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Folder, 
-  File, 
-  MoreVertical, 
-  Download, 
-  Trash2, 
-  Share2, 
-  Plus, 
+import {
+  Folder,
+  File,
+  MoreVertical,
+  Download,
+  Trash2,
+  Share2,
+  Plus,
   ChevronRight,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/files.css';
@@ -16,6 +17,7 @@ import '../styles/files.css';
 interface FileItem {
   file_id?: string;
   folder_id?: string;
+  google_file_id?: string;
   google_folder_id?: string;
   name: string;
   file_size?: string;
@@ -28,6 +30,11 @@ const Files: React.FC = () => {
   const [items, setItems] = useState<FileItem[]>([]);
   const [pathStack, setPathStack] = useState<{id: string | null, name: string}[]>([{id: null, name: 'My Drive'}]);
   const [loading, setLoading] = useState(true);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [shareModal, setShareModal] = useState<{fileId: string, fileName: string} | null>(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareAccess, setShareAccess] = useState('view');
+  const [shareLoading, setShareLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentFolder = pathStack[pathStack.length - 1];
@@ -48,16 +55,19 @@ const Files: React.FC = () => {
     fetchFiles(currentFolder.id);
   }, [currentFolder.id]);
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setOpenMenu(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
   const handleCreateFolder = async () => {
     const folderName = prompt('Enter folder name:');
     if (!folderName) return;
-
     try {
       setLoading(true);
-      await api.post('/files/folders', { 
-        folderName, 
-        parentId: currentFolder.id 
-      });
+      await api.post('/files/folders', { folderName, parentId: currentFolder.id });
       fetchFiles(currentFolder.id);
     } catch (err) {
       alert('Failed to create folder');
@@ -73,11 +83,9 @@ const Files: React.FC = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const formData = new FormData();
     formData.append('file', file);
     if (currentFolder.id) formData.append('folderId', currentFolder.id);
-
     try {
       setLoading(true);
       await api.post('/files/upload', formData, {
@@ -89,6 +97,23 @@ const Files: React.FC = () => {
       alert(err.response?.data?.error || 'Upload failed');
     } finally {
       setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDownload = async (fileId: string, fileName: string) => {
+    try {
+      const response = await api.get(`/files/${fileId}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Download failed');
     }
   };
 
@@ -107,6 +132,25 @@ const Files: React.FC = () => {
     }
   };
 
+  const handleShare = async () => {
+    if (!shareModal || !shareEmail) return;
+    setShareLoading(true);
+    try {
+      await api.post(`/files/${shareModal.fileId}/share`, {
+        email: shareEmail,
+        accessLevel: shareAccess
+      });
+      alert(`Shared "${shareModal.fileName}" with ${shareEmail}`);
+      setShareModal(null);
+      setShareEmail('');
+      setShareAccess('view');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Share failed');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   const enterFolder = (id: string, name: string) => {
     setPathStack([...pathStack, { id, name }]);
   };
@@ -115,15 +159,53 @@ const Files: React.FC = () => {
     setPathStack(pathStack.slice(0, index + 1));
   };
 
+  const toggleMenu = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setOpenMenu(openMenu === id ? null : id);
+  };
+
   return (
     <div className="page-content">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        style={{ display: 'none' }} 
-        onChange={handleFileChange} 
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
       />
-      
+
+      {/* Share Modal */}
+      {shareModal && (
+        <div className="modal-overlay" onClick={() => setShareModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Share "{shareModal.fileName}"</h3>
+              <button className="modal-close" onClick={() => setShareModal(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <label>Email address</label>
+              <input
+                type="email"
+                placeholder="user@example.com"
+                value={shareEmail}
+                onChange={(e) => setShareEmail(e.target.value)}
+                className="modal-input"
+              />
+              <label>Access level</label>
+              <select value={shareAccess} onChange={(e) => setShareAccess(e.target.value)} className="modal-input">
+                <option value="view">View only</option>
+                <option value="edit">Can edit</option>
+              </select>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShareModal(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleShare} disabled={shareLoading || !shareEmail}>
+                {shareLoading ? 'Sharing...' : 'Share'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="files-header">
         <div className="breadcrumb">
           {pathStack.map((crumb, idx) => (
@@ -158,42 +240,54 @@ const Files: React.FC = () => {
         ) : items.length === 0 ? (
           <div className="empty-state">No files or folders here</div>
         ) : (
-          items.map((item, idx) => (
-            <div 
-              key={idx} 
-              className="grid-row" 
-              onDoubleClick={() => item.type === 'folder' && enterFolder(item.folder_id!, item.name)}
-            >
-              <div className="col-name">
-                {item.type === 'folder' ? <Folder className="icon-folder" size={20} /> : <File className="icon-file" size={20} />}
-                <span>{item.name}</span>
-              </div>
-              <div className="col-size">
-                {item.file_size ? `${(parseInt(item.file_size) / 1024).toFixed(1)} KB` : '--'}
-              </div>
-              <div className="col-date">
-                {new Date(item.created_at).toLocaleDateString()}
-              </div>
-              <div className="col-actions">
-                <div className="action-menu">
-                  <MoreVertical size={18} />
-                  <div className="dropdown">
-                    {item.type === 'file' && <button><Download size={14} /> Download</button>}
-                    <button><Share2 size={14} /> Share</button>
-                    <button 
-                      className="delete" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete((item.file_id || item.folder_id)!, item.type);
-                      }}
-                    >
-                      <Trash2 size={14} /> Delete
+          items.map((item) => {
+            const itemId = (item.file_id || item.folder_id)!;
+            return (
+              <div
+                key={itemId}
+                className="grid-row"
+                onDoubleClick={() => item.type === 'folder' && enterFolder(item.folder_id!, item.name)}
+              >
+                <div className="col-name">
+                  {item.type === 'folder' ? <Folder className="icon-folder" size={20} /> : <File className="icon-file" size={20} />}
+                  <span>{item.name}</span>
+                </div>
+                <div className="col-size">
+                  {item.file_size ? `${(parseInt(item.file_size) / 1024).toFixed(1)} KB` : '--'}
+                </div>
+                <div className="col-date">
+                  {new Date(item.created_at).toLocaleDateString()}
+                </div>
+                <div className="col-actions">
+                  <div className="action-menu">
+                    <button className="menu-trigger" onClick={(e) => toggleMenu(e, itemId)}>
+                      <MoreVertical size={18} />
                     </button>
+                    {openMenu === itemId && (
+                      <div className="dropdown show">
+                        {item.type === 'file' && (
+                          <button onClick={() => handleDownload(item.file_id!, item.name)}>
+                            <Download size={14} /> Download
+                          </button>
+                        )}
+                        {item.type === 'file' && (
+                          <button onClick={() => { setShareModal({ fileId: item.file_id!, fileName: item.name }); setOpenMenu(null); }}>
+                            <Share2 size={14} /> Share
+                          </button>
+                        )}
+                        <button
+                          className="delete"
+                          onClick={() => handleDelete(itemId, item.type)}
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
