@@ -161,3 +161,35 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+@media (max-width: 768px) {
+  .dashboard-greeting h2 {
+    font-size: 20px;
+  }
+
+  .dashboard-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .dash-card {
+    padding: 16px;
+  }
+
+  .dash-card-value {
+    font-size: 20px;
+  }
+
+  .activity-mini-item {
+    flex-wrap: wrap;
+  }
+
+  .activity-mini-time {
+    width: 100%;
+    padding-left: 42px;
+  }
+
+  .activity-mini-text {
+    flex-wrap: wrap;
+  }
+}

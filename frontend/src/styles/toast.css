@@ -102,6 +102,19 @@
   }
 }
 
+@media (max-width: 480px) {
+  .toast-container {
+    left: 16px;
+    right: 16px;
+    top: 16px;
+  }
+
+  .toast {
+    min-width: auto;
+    max-width: none;
+  }
+}
+
 @keyframes toast-out {
   from {
     opacity: 1;

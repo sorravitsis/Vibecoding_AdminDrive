@@ -85,3 +85,24 @@
   align-items: center;
   gap: 4px;
 }
+
+@media (max-width: 768px) {
+  .activity-item {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .activity-icon-bg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .activity-main {
+    font-size: 13px;
+  }
+
+  .activity-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}

@@ -177,3 +177,19 @@
   align-items: center;
   gap: 8px;
 }
+
+@media (max-width: 480px) {
+  .login-card {
+    margin: 0 16px;
+    padding: 36px 24px;
+  }
+
+  .login-logo-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .login-logo h2 {
+    font-size: 22px;
+  }
+}

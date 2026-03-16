@@ -123,10 +123,5 @@ body {
   }
 
   /* sidebar mobile handled in sidebar.css */
-
-  .main-header {
-    left: 0;
-    height: 56px;
-    padding: 0 16px;
-  }
+  /* header mobile handled in header.css */
 }

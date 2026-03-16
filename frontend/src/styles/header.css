@@ -62,3 +62,23 @@
 .progress-fill.danger {
   background: linear-gradient(135deg, var(--danger), #f97316);
 }
+
+@media (max-width: 768px) {
+  .main-header {
+    left: 0;
+    height: 56px;
+    padding: 0 16px 0 56px; /* space for hamburger */
+  }
+
+  .page-title {
+    font-size: 15px;
+  }
+
+  .header-right {
+    width: 160px;
+  }
+
+  .quota-info {
+    font-size: 11px;
+  }
+}
