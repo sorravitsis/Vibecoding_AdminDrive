@@ -109,6 +109,69 @@ export const createUser = async (req: any, res: Response) => {
   }
 };
 
+export const updateUser = async (req: any, res: Response) => {
+  const { role } = req.user;
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+  const { email, fullName, userRole } = req.body;
+
+  const allowedRoles = ['user', 'manager', 'admin'];
+  const sets: string[] = [];
+  const vals: any[] = [];
+  let idx = 1;
+
+  if (email) { sets.push(`email = $${idx++}`); vals.push(email.toLowerCase().trim()); }
+  if (fullName) { sets.push(`full_name = $${idx++}`); vals.push(fullName.trim()); }
+  if (userRole && allowedRoles.includes(userRole)) { sets.push(`role = $${idx++}`); vals.push(userRole); }
+
+  if (sets.length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  sets.push(`updated_at = NOW()`);
+  vals.push(userId);
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET ${sets.join(', ')} WHERE user_id = $${idx} RETURNING user_id, email, full_name, role, status`,
+      vals
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const resetPassword = async (req: any, res: Response) => {
+  const { role } = req.user;
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const result = await pool.query(
+      `UPDATE users SET password_hash = $1, token_version = token_version + 1, updated_at = NOW() WHERE user_id = $2 RETURNING user_id`,
+      [passwordHash, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'Password reset successfully. All sessions invalidated.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 export const getMyStorage = async (req: any, res: Response) => {
   const { userId } = req.user;
 

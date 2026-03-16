@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3
+  Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3, Eye,
+  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/files.css';
@@ -17,6 +18,23 @@ interface FileItem {
   type: 'file' | 'folder';
 }
 
+const getFileIcon = (mimeType?: string) => {
+  if (!mimeType) return <File className="icon-file" size={20} />;
+  if (mimeType.startsWith('image/')) return <Image className="icon-image" size={20} />;
+  if (mimeType.startsWith('video/')) return <Film className="icon-video" size={20} />;
+  if (mimeType.startsWith('audio/')) return <Music className="icon-audio" size={20} />;
+  if (mimeType === 'application/pdf') return <FileText className="icon-pdf" size={20} />;
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return <FileSpreadsheet className="icon-sheet" size={20} />;
+  if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) return <Archive className="icon-archive" size={20} />;
+  if (mimeType.includes('javascript') || mimeType.includes('json') || mimeType.includes('html') || mimeType.includes('css') || mimeType.includes('xml')) return <FileCode className="icon-code" size={20} />;
+  return <File className="icon-file" size={20} />;
+};
+
+const isPreviewable = (mimeType?: string) => {
+  if (!mimeType) return false;
+  return mimeType === 'application/pdf' || mimeType.startsWith('image/');
+};
+
 const Files: React.FC = () => {
   const [items, setItems] = useState<FileItem[]>([]);
   const [pathStack, setPathStack] = useState<{id: string | null, name: string}[]>([{id: null, name: 'My Drive'}]);
@@ -26,6 +44,7 @@ const Files: React.FC = () => {
   const [shareEmail, setShareEmail] = useState('');
   const [shareAccess, setShareAccess] = useState('view');
   const [shareLoading, setShareLoading] = useState(false);
+  const [previewModal, setPreviewModal] = useState<{id: string, name: string, mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentFolder = pathStack[pathStack.length - 1];
@@ -100,6 +119,10 @@ const Files: React.FC = () => {
     }
   };
 
+  const handlePreview = (fileId: string, fileName: string, mimeType: string) => {
+    setPreviewModal({ id: fileId, name: fileName, mimeType });
+  };
+
   const handleDelete = async (id: string, type: 'file' | 'folder') => {
     if (window.confirm(`Move this ${type} to recycle bin?`)) {
       try {
@@ -148,10 +171,25 @@ const Files: React.FC = () => {
   const navigateTo = (index: number) => setPathStack(pathStack.slice(0, index + 1));
   const toggleMenu = (e: React.MouseEvent, id: string) => { e.stopPropagation(); setOpenMenu(openMenu === id ? null : id); };
 
+  const getPreviewUrl = (fileId: string) => {
+    const baseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
+    const token = localStorage.getItem('token');
+    return `${baseUrl}/files/${fileId}/preview?token=${token}`;
+  };
+
+  const formatSize = (size?: string) => {
+    if (!size) return '--';
+    const bytes = parseInt(size);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="page-content">
       <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
 
+      {/* Share Modal */}
       {shareModal && (
         <div className="modal-overlay" onClick={() => setShareModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -174,6 +212,30 @@ const Files: React.FC = () => {
               <button className="btn-primary" onClick={handleShare} disabled={shareLoading || !shareEmail}>
                 {shareLoading ? 'Sharing...' : 'Share'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF / Image Preview Modal */}
+      {previewModal && (
+        <div className="modal-overlay preview-overlay" onClick={() => setPreviewModal(null)}>
+          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{previewModal.name}</h3>
+              <div className="preview-actions">
+                <button className="btn-secondary btn-sm" onClick={() => handleDownload(previewModal.id, previewModal.name)}>
+                  <Download size={16} /> Download
+                </button>
+                <button className="modal-close" onClick={() => setPreviewModal(null)}><X size={20} /></button>
+              </div>
+            </div>
+            <div className="preview-body">
+              {previewModal.mimeType === 'application/pdf' ? (
+                <iframe src={getPreviewUrl(previewModal.id)} title="PDF Preview" className="preview-iframe" />
+              ) : previewModal.mimeType.startsWith('image/') ? (
+                <img src={getPreviewUrl(previewModal.id)} alt={previewModal.name} className="preview-image" />
+              ) : null}
             </div>
           </div>
         </div>
@@ -211,20 +273,27 @@ const Files: React.FC = () => {
             const itemId = (item.file_id || item.folder_id)!;
             return (
               <div key={itemId} className="grid-row"
-                onDoubleClick={() => item.type === 'folder' && enterFolder(item.folder_id!, item.name)}>
+                onDoubleClick={() => {
+                  if (item.type === 'folder') enterFolder(item.folder_id!, item.name);
+                  else if (isPreviewable(item.mime_type)) handlePreview(item.file_id!, item.name, item.mime_type!);
+                }}>
                 <div className="col-name">
-                  {item.type === 'folder' ? <Folder className="icon-folder" size={20} /> : <File className="icon-file" size={20} />}
+                  {item.type === 'folder' ? <Folder className="icon-folder" size={20} /> : getFileIcon(item.mime_type)}
                   <span>{item.name}</span>
+                  {item.mime_type === 'application/pdf' && <span className="file-badge pdf">PDF</span>}
                 </div>
-                <div className="col-size">
-                  {item.file_size ? `${(parseInt(item.file_size) / 1024).toFixed(1)} KB` : '--'}
-                </div>
+                <div className="col-size">{formatSize(item.file_size)}</div>
                 <div className="col-date">{new Date(item.created_at).toLocaleDateString()}</div>
                 <div className="col-actions">
                   <div className="action-menu">
                     <button className="menu-trigger" onClick={(e) => toggleMenu(e, itemId)}><MoreVertical size={18} /></button>
                     {openMenu === itemId && (
                       <div className="dropdown show">
+                        {item.type === 'file' && isPreviewable(item.mime_type) && (
+                          <button onClick={() => { handlePreview(item.file_id!, item.name, item.mime_type!); setOpenMenu(null); }}>
+                            <Eye size={14} /> Preview
+                          </button>
+                        )}
                         {item.type === 'file' && (
                           <button onClick={() => handleDownload(item.file_id!, item.name)}><Download size={14} /> Download</button>
                         )}

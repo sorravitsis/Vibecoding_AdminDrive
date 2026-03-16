@@ -215,6 +215,39 @@ export const downloadFile = async (req: any, res: Response) => {
   }
 };
 
+export const previewFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId, role } = req.user;
+
+  try {
+    const fileRes = await pool.query(
+      "SELECT google_file_id, file_name, mime_type, uploader_id FROM files WHERE file_id = $1 AND status = 'active'",
+      [fileId]
+    );
+    if (fileRes.rows.length === 0) return res.status(404).json({ error: 'File not found' });
+
+    const file = fileRes.rows[0];
+
+    if (role !== 'admin' && role !== 'manager' && file.uploader_id !== userId) {
+      const permRes = await pool.query("SELECT 1 FROM permissions WHERE file_id = $1 AND user_id = $2", [fileId, userId]);
+      if (permRes.rows.length === 0) return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const drive = getDriveService();
+    const driveRes = await drive.files.get(
+      { fileId: file.google_file_id, alt: 'media', supportsAllDrives: true },
+      { responseType: 'stream' }
+    );
+
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.file_name)}"`);
+    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    (driveRes.data as any).pipe(res);
+  } catch (err: any) {
+    console.error('Preview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 export const renameFile = async (req: any, res: Response) => {
   const { fileId } = req.params;
   const { newName } = req.body;

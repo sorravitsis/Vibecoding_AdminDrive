@@ -1,7 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 :root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #16161f;
+  --bg-elevated: #1c1c28;
+  --bg-hover: #22222e;
+  --border: #2a2a3a;
+  --border-light: #353545;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8888a0;
+  --text-muted: #5c5c70;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #06b6d4;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.4);
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #121212;
-  color: #e0e0e0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -18,41 +49,49 @@ body {
 
 .main-wrapper {
   flex: 1;
-  margin-left: 260px; /* Sidebar width */
+  margin-left: 270px;
   display: flex;
   flex-direction: column;
 }
 
 .content-area {
-  margin-top: 72px; /* Header height */
+  margin-top: 64px;
   flex: 1;
-  padding: 32px;
+  padding: 24px;
   overflow-y: auto;
-  background-color: #121212;
+  background-color: var(--bg-primary);
 }
 
 .page-content {
-  background: #1e1e1e;
-  border-radius: 12px;
-  padding: 24px;
-  min-height: calc(100vh - 72px - 64px - 48px);
-  border: 1px solid #333;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  min-height: calc(100vh - 64px - 48px - 24px);
+  border: 1px solid var(--border);
 }
 
-/* Scrollbar styles */
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: var(--border-light);
 }
+
+/* Shared utilities */
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
+.text-success { color: var(--success); }
+.text-info { color: var(--info); }
+.text-primary { color: var(--accent); }
+.text-secondary { color: var(--text-muted); }

@@ -62,7 +62,7 @@ const Dashboard: React.FC = () => {
     <div className="page-content">
       <div className="dashboard-greeting">
         <h2>Welcome, {user?.fullName}</h2>
-        <p>Here's an overview of your drive</p>
+        <p>Here's an overview of your SiS Warehouse</p>
       </div>
 
       <div className="dashboard-cards">

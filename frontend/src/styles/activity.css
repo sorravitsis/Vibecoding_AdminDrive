@@ -1,43 +1,45 @@
 .activity-header {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .activity-header h2 {
   margin: 0;
   font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .activity-header p {
-  margin: 8px 0 0 0;
-  color: #888;
+  margin: 6px 0 0 0;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .activity-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .activity-item {
   display: flex;
   gap: 16px;
   padding: 16px;
-  background: #2a2a2a;
-  border-radius: 12px;
-  border: 1px solid #333;
-  transition: all 0.2s;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  transition: var(--transition);
 }
 
 .activity-item:hover {
-  border-color: #646cff44;
-  background: #2d2d2d;
+  border-color: var(--border-light);
+  background: var(--bg-hover);
 }
 
 .activity-icon-bg {
   width: 40px;
   height: 40px;
-  background: #1a1a1a;
+  background: var(--bg-card);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -52,29 +54,29 @@
 .activity-main {
   display: flex;
   gap: 8px;
-  font-size: 15px;
+  font-size: 14px;
   margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
 .actor-name {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .action-text {
-  color: #888;
+  color: var(--text-secondary);
 }
 
 .target-name {
   font-weight: 500;
-  color: #646cff;
+  color: var(--accent-hover);
 }
 
 .activity-meta {
   display: flex;
   gap: 16px;
-  color: #666;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -83,10 +85,3 @@
   align-items: center;
   gap: 4px;
 }
-
-.text-success { color: #28a745; }
-.text-danger { color: #dc3545; }
-.text-info { color: #17a2b8; }
-.text-primary { color: #646cff; }
-.text-warning { color: #ffc107; }
-.text-secondary { color: #6c757d; }

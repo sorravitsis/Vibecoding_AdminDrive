@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Warehouse, Mail, Lock, ArrowRight } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/login.css';
 
@@ -20,7 +21,6 @@ const Login: React.FC = () => {
     try {
       const response = await api.post('/auth/login', { email, password });
       const { token, user } = response.data;
-      
       login(token, user);
       navigate('/');
     } catch (err: any) {
@@ -32,46 +32,53 @@ const Login: React.FC = () => {
 
   return (
     <div className="login-container">
+      <div className="login-bg-pattern"></div>
       <div className="login-card">
-        <h2>Admin Drive</h2>
-        <p>Login to your account</p>
-        
+        <div className="login-logo">
+          <div className="login-logo-icon">
+            <Warehouse size={32} />
+          </div>
+          <h2>SiS Warehouse</h2>
+          <p>Sign in to your account</p>
+        </div>
+
         {error && <div className="error-message">{error}</div>}
-        
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Email</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              placeholder="admin@example.com"
-              required
-            />
+            <div className="input-wrapper">
+              <Mail size={18} className="input-icon" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
           </div>
           <div className="form-group">
             <label>Password</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              placeholder="••••••••"
-              required
-            />
+            <div className="input-wrapper">
+              <Lock size={18} className="input-icon" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+              />
+            </div>
           </div>
-          <button type="submit" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+          <button type="submit" disabled={loading} className="login-btn">
+            {loading ? (
+              <span className="btn-loading">Signing in...</span>
+            ) : (
+              <>Sign In <ArrowRight size={18} /></>
+            )}
           </button>
         </form>
-        
-        <div className="login-hint">
-          <p>Demo accounts (Wait for Seeding):</p>
-          <ul>
-            <li>admin@example.com</li>
-            <li>manager@example.com</li>
-            <li>user@example.com</li>
-          </ul>
-        </div>
       </div>
     </div>
   );

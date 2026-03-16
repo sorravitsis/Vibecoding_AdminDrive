@@ -1,59 +1,64 @@
 .main-header {
-  height: 72px;
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
+  height: 64px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
+  padding: 0 28px;
   position: fixed;
   top: 0;
-  left: 260px;
+  left: 270px;
   right: 0;
   z-index: 100;
+  backdrop-filter: blur(12px);
+  background: rgba(18, 18, 26, 0.85);
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   margin: 0;
-  color: #fff;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
 }
 
 .header-right {
-  width: 320px;
+  width: 280px;
 }
 
 .quota-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .quota-info {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #888;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .progress-bar {
-  height: 6px;
-  background: #333;
+  height: 5px;
+  background: var(--bg-hover);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #646cff;
-  transition: width 0.3s ease;
+  background: var(--accent-gradient);
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .progress-fill.warning {
-  background: #ffc107;
+  background: linear-gradient(135deg, var(--warning), #f97316);
 }
 
 .progress-fill.danger {
-  background: #dc3545;
+  background: linear-gradient(135deg, var(--danger), #f97316);
 }

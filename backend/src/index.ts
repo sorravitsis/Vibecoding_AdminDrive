@@ -14,13 +14,14 @@ import {
   listDeletedFiles,
   createFolder,
   downloadFile,
+  previewFile,
   shareFile,
   shareFolder,
   renameFile,
   renameFolder
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
-import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser } from './controllers/userController.js';
+import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
 import { login, loginValidation } from './controllers/authController.js';
 
@@ -69,6 +70,7 @@ app.get('/files/deleted', listDeletedFiles);
 app.post('/files/upload', upload.single('file'), uploadFile);
 app.post('/files/folders', createFolder);
 app.get('/files/:fileId/download', downloadFile);
+app.get('/files/:fileId/preview', previewFile);
 app.post('/files/:fileId/share', shareFile);
 app.put('/files/:fileId/rename', renameFile);
 app.post('/files/folders/:folderId/share', shareFolder);
@@ -88,6 +90,8 @@ app.get('/me/storage', getMyStorage);
 app.post('/admin/users', createUser);
 app.put('/admin/users/:userId/suspend', suspendUser);
 app.put('/admin/users/:userId/activate', activateUser);
+app.put('/admin/users/:userId/reset-password', resetPassword);
+app.put('/admin/users/:userId', updateUser);
 app.get('/admin/storage-stats', getStorageStats);
 
 // Auto migrate and seed on startup

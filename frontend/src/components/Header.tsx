@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Search, Bell } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/header.css';
 
@@ -30,13 +31,13 @@ const Header: React.FC = () => {
   return (
     <header className="main-header">
       <div className="header-left">
-        <h1 className="page-title">My Drive</h1>
+        <h1 className="page-title">SiS Warehouse</h1>
       </div>
       <div className="header-right">
         <div className="quota-container">
           <div className="quota-info">
-            <span>Storage: {usedGB} GB of {totalGB} GB used</span>
-            <span>{percentage.toFixed(1)}%</span>
+            <span>{usedGB} GB / {totalGB} GB</span>
+            <span className={percentage > 90 ? 'text-danger' : percentage > 70 ? 'text-warning' : ''}>{percentage.toFixed(1)}%</span>
           </div>
           <div className="progress-bar">
             <div

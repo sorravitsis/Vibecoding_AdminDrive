@@ -4,7 +4,9 @@ import {
   UserCheck,
   Shield,
   UserPlus,
-  X
+  X,
+  Edit3,
+  Key
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/users.css';
@@ -26,6 +28,12 @@ const UsersManagement: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ email: '', fullName: '', password: '', userRole: 'user' });
   const [creating, setCreating] = useState(false);
+  const [editUser, setEditUser] = useState<UserStats | null>(null);
+  const [editForm, setEditForm] = useState({ email: '', fullName: '', userRole: 'user' });
+  const [saving, setSaving] = useState(false);
+  const [resetPwUser, setResetPwUser] = useState<UserStats | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const handleCreateUser = async () => {
     if (!createForm.email || !createForm.fullName || !createForm.password) {
@@ -46,12 +54,49 @@ const UsersManagement: React.FC = () => {
     }
   };
 
+  const handleEditUser = async () => {
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      await api.put(`/admin/users/${editUser.user_id}`, editForm);
+      alert('User updated successfully!');
+      setEditUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetPwUser || !newPassword) return;
+    if (newPassword.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+    setResetting(true);
+    try {
+      await api.put(`/admin/users/${resetPwUser.user_id}/reset-password`, { newPassword });
+      alert('Password reset successfully! All user sessions invalidated.');
+      setResetPwUser(null);
+      setNewPassword('');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to reset password');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const openEditModal = (user: UserStats) => {
+    setEditForm({ email: user.email || '', fullName: user.full_name, userRole: user.role || 'user' });
+    setEditUser(user);
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const response = await api.get('/admin/storage-stats');
-      // In a real app, we might need a separate endpoint for full user list, 
-      // but we'll use storage-stats for now as it contains the key info.
       setUsers(response.data);
     } catch (err) {
       console.error('Failed to fetch user stats', err);
@@ -65,6 +110,8 @@ const UsersManagement: React.FC = () => {
   }, []);
 
   const handleToggleStatus = async (userId: string, currentStatus: string) => {
+    const action = currentStatus === 'suspended' ? 'activate' : 'suspend';
+    if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
     try {
       if (currentStatus === 'suspended') {
         await api.put(`/admin/users/${userId}/activate`);
@@ -88,6 +135,7 @@ const UsersManagement: React.FC = () => {
 
   return (
     <div className="page-content">
+      {/* Create User Modal */}
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -124,6 +172,68 @@ const UsersManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Edit User Modal */}
+      {editUser && (
+        <div className="modal-overlay" onClick={() => setEditUser(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Edit User</h3>
+              <button className="modal-close" onClick={() => setEditUser(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <label>Full Name</label>
+              <input className="modal-input" value={editForm.fullName}
+                onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })} />
+              <label>Email</label>
+              <input className="modal-input" type="email" value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              <label>Role</label>
+              <select className="modal-input" value={editForm.userRole}
+                onChange={(e) => setEditForm({ ...editForm, userRole: e.target.value })}>
+                <option value="user">User</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setEditUser(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleEditUser} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPwUser && (
+        <div className="modal-overlay" onClick={() => setResetPwUser(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Reset Password</h3>
+              <button className="modal-close" onClick={() => setResetPwUser(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: '#ccc', fontSize: 14, margin: '0 0 12px' }}>
+                Reset password for <strong>{resetPwUser.full_name}</strong> ({resetPwUser.email})
+              </p>
+              <label>New Password</label>
+              <input className="modal-input" type="password" placeholder="Min 6 characters"
+                value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <p style={{ fontSize: 12, color: '#f59e0b', margin: '8px 0 0' }}>
+                This will invalidate all active sessions for this user.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setResetPwUser(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleResetPassword} disabled={resetting || !newPassword}>
+                {resetting ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="users-header">
         <div>
           <h2>Users Management</h2>
@@ -153,7 +263,7 @@ const UsersManagement: React.FC = () => {
                   <td>
                     <div className="user-cell">
                       <div className="avatar-placeholder">
-                        <Shield size={16} />
+                        {user.full_name?.charAt(0) || 'U'}
                       </div>
                       <div className="user-info-text">
                         <span className="user-name">{user.full_name}</span>
@@ -183,12 +293,18 @@ const UsersManagement: React.FC = () => {
                   <td>{formatBytes(user.quota_bytes)}</td>
                   <td>
                     <div className="action-buttons">
+                      <button className="action-btn edit" onClick={() => openEditModal(user)} title="Edit User">
+                        <Edit3 size={16} />
+                      </button>
+                      <button className="action-btn reset-pw" onClick={() => { setResetPwUser(user); setNewPassword(''); }} title="Reset Password">
+                        <Key size={16} />
+                      </button>
                       <button
                         className={`action-btn ${user.status === 'suspended' ? 'activate' : 'suspend'}`}
                         onClick={() => handleToggleStatus(user.user_id || 'dummy', user.status || 'active')}
                         title={user.status === 'suspended' ? 'Activate' : 'Suspend'}
                       >
-                        {user.status === 'suspended' ? <UserCheck size={18} /> : <UserX size={18} />}
+                        {user.status === 'suspended' ? <UserCheck size={16} /> : <UserX size={16} />}
                       </button>
                     </div>
                   </td>
