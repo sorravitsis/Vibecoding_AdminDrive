@@ -5,20 +5,18 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
 export const getDriveService = () => {
   let auth;
 
   if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    // Render: read from environment variable
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
     auth = new google.auth.GoogleAuth({
       credentials,
       scopes: SCOPES,
     });
   } else {
-    // Local: read from file
     const KEY_FILE_PATH = path.join(__dirname, '../config/service-account.json');
     auth = new google.auth.GoogleAuth({
       keyFile: KEY_FILE_PATH,
