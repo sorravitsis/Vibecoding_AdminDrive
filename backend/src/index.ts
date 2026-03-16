@@ -20,7 +20,7 @@ import {
   renameFolder
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
-import { suspendUser, activateUser, getStorageStats, getMyStorage } from './controllers/userController.js';
+import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
 import { login, loginValidation } from './controllers/authController.js';
 
@@ -85,6 +85,7 @@ app.get('/activity/user/:userId', getUserActivity);
 app.get('/me/storage', getMyStorage);
 
 // Admin routes
+app.post('/admin/users', createUser);
 app.put('/admin/users/:userId/suspend', suspendUser);
 app.put('/admin/users/:userId/activate', activateUser);
 app.get('/admin/storage-stats', getStorageStats);

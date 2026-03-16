@@ -4,14 +4,12 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import './styles/global.css';
 
+import Dashboard from './pages/Dashboard';
 import Files from './pages/Files';
 import RecycleBin from './pages/RecycleBin';
 import Login from './pages/Login';
 import Activity from './pages/Activity';
 import UsersManagement from './pages/UsersManagement';
-
-// Mock Pages for now
-const Dashboard = () => <div className="page-content">Dashboard Content</div>;
 
 const ProtectedLayout = ({ children, roles }: { children: React.ReactNode, roles?: string[] }) => {
   const { isAuthenticated, user } = useAuth();

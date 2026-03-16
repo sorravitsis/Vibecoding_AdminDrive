@@ -1,0 +1,152 @@
+.dashboard-greeting {
+  margin-bottom: 24px;
+}
+
+.dashboard-greeting h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.dashboard-greeting p {
+  margin: 0;
+  color: #888;
+  font-size: 14px;
+}
+
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.dash-card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-card-icon.storage { background: #646cff22; color: #646cff; }
+.dash-card-icon.files { background: #22c55e22; color: #22c55e; }
+.dash-card-icon.folders { background: #fcc41922; color: #fcc419; }
+.dash-card-icon.trash { background: #dc354522; color: #dc3545; }
+
+.dash-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-card-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.dash-card-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.dash-storage-bar {
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dash-storage-fill {
+  height: 100%;
+  background: #646cff;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.dash-storage-fill.warning { background: #f59e0b; }
+.dash-storage-fill.danger { background: #dc3545; }
+
+.dashboard-activity {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.dashboard-activity h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.activity-mini-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-mini-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #222;
+}
+
+.activity-mini-item:last-child {
+  border-bottom: none;
+}
+
+.activity-mini-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.activity-mini-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.activity-mini-actor {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.activity-mini-action {
+  color: #888;
+  white-space: nowrap;
+}
+
+.activity-mini-target {
+  color: #646cff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-mini-time {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

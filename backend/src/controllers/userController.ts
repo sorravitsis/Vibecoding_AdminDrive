@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import pool from '../config/database';
 
 export const suspendUser = async (req: any, res: Response) => {
@@ -69,6 +70,40 @@ export const getStorageStats = async (req: any, res: Response) => {
     `;
     const { rows } = await pool.query(query);
     res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const createUser = async (req: any, res: Response) => {
+  const { role } = req.user;
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { email, fullName, password, userRole } = req.body;
+  if (!email || !fullName || !password) {
+    return res.status(400).json({ error: 'email, fullName, and password are required' });
+  }
+
+  const allowedRoles = ['user', 'manager', 'admin'];
+  const finalRole = allowedRoles.includes(userRole) ? userRole : 'user';
+
+  try {
+    // Check if email already exists
+    const existing = await pool.query('SELECT user_id FROM users WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      `INSERT INTO users (email, full_name, role, status, quota_bytes, used_bytes, password_hash)
+       VALUES ($1, $2, $3, 'active', 5368709120, 0, $4)
+       RETURNING user_id, email, full_name, role, status`,
+      [email.toLowerCase().trim(), fullName.trim(), finalRole, passwordHash]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
