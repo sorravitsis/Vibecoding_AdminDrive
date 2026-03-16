@@ -38,7 +38,6 @@ export const uploadFile = async (req: any, res: Response) => {
   try {
     await client.query('BEGIN');
 
-    // PRD Fix 5: Lock folder row to prevent concurrent duplicate names
     if (folderId) {
       await client.query('SELECT folder_id FROM folders WHERE folder_id = $1 FOR UPDATE', [folderId]);
     }
@@ -55,7 +54,6 @@ export const uploadFile = async (req: any, res: Response) => {
 
     const googleFileId = driveRes.data.id;
 
-    // PRD Fix 4: Check quota before insert
     const userRes = await client.query('SELECT quota_bytes, used_bytes FROM users WHERE user_id = $1', [userId]);
     const user = userRes.rows[0];
     if (BigInt(user.used_bytes) + BigInt(file.size) > BigInt(user.quota_bytes)) throw new Error('Quota exceeded');
@@ -112,36 +110,53 @@ export const createFolder = async (req: any, res: Response) => {
 };
 
 export const listFiles = async (req: any, res: Response) => {
-  const { folderId } = req.query;
+  const { folderId, search } = req.query;
   const { userId, role } = req.user;
 
   try {
     const fId = (folderId === '' || folderId === 'null' || !folderId) ? null : folderId;
 
-    const foldersRes = await pool.query(
-      `SELECT folder_id, google_folder_id, name, created_at, 'folder' as type
+    // Search filter
+    const searchFilter = search ? `AND name ILIKE $` : '';
+    const searchFilterFile = search ? `AND f.file_name ILIKE $` : '';
+
+    let folderParams: any[] = [fId];
+    let fileParams: any[] = [fId];
+
+    let folderQuery = `SELECT folder_id, google_folder_id, name, created_at, 'folder' as type
        FROM folders WHERE status = 'active'
-       AND (parent_id IS NOT DISTINCT FROM $1)`,
-      [fId]
-    );
+       AND (parent_id IS NOT DISTINCT FROM $1)`;
+
+    if (search) {
+      folderParams.push(`%${search}%`);
+      folderQuery += ` AND name ILIKE $2`;
+    }
+
+    const foldersRes = await pool.query(folderQuery, folderParams);
 
     let filesRes;
     if (role === 'admin' || role === 'manager') {
-      filesRes = await pool.query(
-        `SELECT file_id, google_file_id, file_name as name, file_size, mime_type, created_at, uploader_id, 'file' as type
+      let q = `SELECT file_id, google_file_id, file_name as name, file_size, mime_type, created_at, uploader_id, 'file' as type
          FROM files WHERE status = 'active'
-         AND (folder_id IS NOT DISTINCT FROM $1)`,
-        [fId]
-      );
+         AND (folder_id IS NOT DISTINCT FROM $1)`;
+      if (search) {
+        fileParams.push(`%${search}%`);
+        q += ` AND file_name ILIKE $2`;
+      }
+      filesRes = await pool.query(q, fileParams);
     } else {
-      filesRes = await pool.query(
-        `SELECT DISTINCT f.file_id, f.google_file_id, f.file_name as name, f.file_size, f.mime_type, f.created_at, f.uploader_id, 'file' as type
+      let q = `SELECT DISTINCT f.file_id, f.google_file_id, f.file_name as name, f.file_size, f.mime_type, f.created_at, f.uploader_id, 'file' as type
          FROM files f LEFT JOIN permissions p ON p.file_id = f.file_id
          WHERE f.status = 'active'
          AND (f.folder_id IS NOT DISTINCT FROM $1)
-         AND (f.uploader_id = $2 OR (p.user_id = $2 AND p.access_level IN ('view', 'edit')))`,
-        [fId, userId]
-      );
+         AND (f.uploader_id = $2 OR (p.user_id = $2 AND p.access_level IN ('view', 'edit'))
+              OR EXISTS (SELECT 1 FROM permissions fp WHERE fp.folder_id = f.folder_id AND fp.user_id = $2))`;
+      fileParams.push(userId);
+      if (search) {
+        fileParams.push(`%${search}%`);
+        q += ` AND f.file_name ILIKE $3`;
+      }
+      filesRes = await pool.query(q, fileParams);
     }
 
     res.json([...foldersRes.rows, ...filesRes.rows]);
@@ -267,14 +282,9 @@ export const renameFile = async (req: any, res: Response) => {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
-    // Update in Google Drive
     try {
       const drive = getDriveService();
-      await drive.files.update({
-        fileId: file.google_file_id,
-        supportsAllDrives: true,
-        requestBody: { name: newName },
-      });
+      await drive.files.update({ fileId: file.google_file_id, supportsAllDrives: true, requestBody: { name: newName } });
     } catch (driveErr) {
       console.error('Google Drive rename error:', driveErr);
     }
@@ -310,11 +320,7 @@ export const renameFolder = async (req: any, res: Response) => {
 
     try {
       const drive = getDriveService();
-      await drive.files.update({
-        fileId: folder.google_folder_id,
-        supportsAllDrives: true,
-        requestBody: { name: newName },
-      });
+      await drive.files.update({ fileId: folder.google_folder_id, supportsAllDrives: true, requestBody: { name: newName } });
     } catch (driveErr) {
       console.error('Google Drive rename folder error:', driveErr);
     }
@@ -368,12 +374,16 @@ export const deleteFile = async (req: any, res: Response) => {
   }
 };
 
+// Cascade delete: folder + all sub-folders + all files inside
 export const deleteFolder = async (req: any, res: Response) => {
   const { folderId } = req.params;
   const { userId, role } = req.user;
+  const client = await pool.connect();
 
   try {
-    const folderRes = await pool.query(
+    await client.query('BEGIN');
+
+    const folderRes = await client.query(
       "SELECT folder_id, name, owner_id, google_folder_id FROM folders WHERE folder_id = $1 AND status = 'active'",
       [folderId]
     );
@@ -384,20 +394,62 @@ export const deleteFolder = async (req: any, res: Response) => {
       throw new Error('Permission denied');
     }
 
+    // Find all descendant folders recursively
+    const descendantsRes = await client.query(`
+      WITH RECURSIVE folder_tree AS (
+        SELECT folder_id FROM folders WHERE folder_id = $1
+        UNION ALL
+        SELECT f.folder_id FROM folders f
+        JOIN folder_tree ft ON f.parent_id = ft.folder_id
+        WHERE f.status = 'active'
+      )
+      SELECT folder_id FROM folder_tree
+    `, [folderId]);
+
+    const allFolderIds = descendantsRes.rows.map((r: any) => r.folder_id);
+
+    // Soft-delete all files in those folders + update used_bytes
+    const filesRes = await client.query(`
+      UPDATE files SET status = 'deleted', deleted_at = NOW(), deleted_by = $1
+      WHERE folder_id = ANY($2) AND status = 'active'
+      RETURNING file_size, uploader_id, file_id, file_name
+    `, [userId, allFolderIds]);
+
+    for (const file of filesRes.rows) {
+      await client.query(
+        'UPDATE users SET used_bytes = GREATEST(0, used_bytes - $1) WHERE user_id = $2',
+        [file.file_size, file.uploader_id]
+      );
+    }
+
+    // Soft-delete all folders
+    await client.query(`
+      UPDATE folders SET status = 'deleted', deleted_at = NOW(), deleted_by = $1
+      WHERE folder_id = ANY($2) AND status = 'active'
+    `, [userId, allFolderIds]);
+
+    // Trash on Google Drive (Drive cascades automatically)
     try {
       const drive = getDriveService();
       await drive.files.update({ fileId: folder.google_folder_id, supportsAllDrives: true, requestBody: { trashed: true } });
     } catch (driveErr) {
-      console.error('Google Drive trash error (continuing):', driveErr);
+      console.error('Drive trash error:', driveErr);
     }
 
-    await pool.query("UPDATE folders SET status = 'deleted', deleted_at = NOW(), deleted_by = $1 WHERE folder_id = $2", [userId, folderId]);
-    await logAction(userId, 'delete', 'folder', folderId, { folder_name: folder.name });
+    await logAction(userId, 'delete', 'folder', folderId, {
+      folder_name: folder.name,
+      files_deleted: filesRes.rows.length,
+      subfolders_deleted: allFolderIds.length - 1
+    });
 
-    res.json({ message: 'Folder moved to recycle bin' });
+    await client.query('COMMIT');
+    res.json({ message: 'Folder and contents moved to recycle bin' });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error('Delete folder error:', err);
     res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
   }
 };
 
@@ -489,6 +541,7 @@ export const shareFile = async (req: any, res: Response) => {
   }
 };
 
+// Cascade share: folder + all files inside sub-folders
 export const shareFolder = async (req: any, res: Response) => {
   const { folderId } = req.params;
   const { email, accessLevel } = req.body;
@@ -510,6 +563,7 @@ export const shareFolder = async (req: any, res: Response) => {
     if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const targetUserId = userRes.rows[0].user_id;
 
+    // Share the folder itself
     await pool.query(
       `INSERT INTO permissions (folder_id, user_id, access_level)
        VALUES ($1, $2, $3)
@@ -517,6 +571,28 @@ export const shareFolder = async (req: any, res: Response) => {
        DO UPDATE SET access_level = $3`,
       [folderId, targetUserId, accessLevel || 'view']
     );
+
+    // Cascade to all files in this folder and sub-folders
+    const descendantsRes = await pool.query(`
+      WITH RECURSIVE folder_tree AS (
+        SELECT folder_id FROM folders WHERE folder_id = $1
+        UNION ALL
+        SELECT f.folder_id FROM folders f
+        JOIN folder_tree ft ON f.parent_id = ft.folder_id
+        WHERE f.status = 'active'
+      )
+      SELECT folder_id FROM folder_tree
+    `, [folderId]);
+
+    const allFolderIds = descendantsRes.rows.map((r: any) => r.folder_id);
+
+    await pool.query(`
+      INSERT INTO permissions (file_id, user_id, access_level)
+      SELECT f.file_id, $1, $2
+      FROM files f WHERE f.folder_id = ANY($3) AND f.status = 'active'
+      ON CONFLICT (file_id, user_id) WHERE file_id IS NOT NULL
+      DO UPDATE SET access_level = $2
+    `, [targetUserId, accessLevel || 'view', allFolderIds]);
 
     try {
       const drive = getDriveService();
@@ -530,7 +606,7 @@ export const shareFolder = async (req: any, res: Response) => {
       console.error('Google Drive share folder error (continuing):', driveErr);
     }
 
-    await logAction(userId, 'share', 'folder', folderId, { folder_name: folder.name, shared_with: email, access_level: accessLevel });
+    await logAction(userId, 'share', 'folder', folderId, { folder_name: folder.name, shared_with: email, access_level: accessLevel, files_shared: allFolderIds.length });
     res.json({ message: `Folder shared with ${email}` });
   } catch (err: any) {
     console.error('Share folder error:', err);

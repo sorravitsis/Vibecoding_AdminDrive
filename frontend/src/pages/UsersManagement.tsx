@@ -28,7 +28,7 @@ const UsersManagement: React.FC = () => {
   const [createForm, setCreateForm] = useState({ email: '', fullName: '', password: '', userRole: 'user' });
   const [creating, setCreating] = useState(false);
   const [editUser, setEditUser] = useState<UserStats | null>(null);
-  const [editForm, setEditForm] = useState({ email: '', fullName: '', userRole: 'user' });
+  const [editForm, setEditForm] = useState({ email: '', fullName: '', userRole: 'user', quotaGb: '5' });
   const [saving, setSaving] = useState(false);
   const [resetPwUser, setResetPwUser] = useState<UserStats | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -57,7 +57,10 @@ const UsersManagement: React.FC = () => {
     if (!editUser) return;
     setSaving(true);
     try {
-      await api.put(`/admin/users/${editUser.user_id}`, editForm);
+      await api.put(`/admin/users/${editUser.user_id}`, {
+        ...editForm,
+        quotaBytes: Math.round(parseFloat(editForm.quotaGb) * 1024 * 1024 * 1024),
+      });
       alert('User updated successfully!');
       setEditUser(null);
       fetchUsers();
@@ -70,8 +73,8 @@ const UsersManagement: React.FC = () => {
 
   const handleResetPassword = async () => {
     if (!resetPwUser || !newPassword) return;
-    if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters with upper+lower+number');
       return;
     }
     setResetting(true);
@@ -88,7 +91,7 @@ const UsersManagement: React.FC = () => {
   };
 
   const openEditModal = (user: UserStats) => {
-    setEditForm({ email: user.email || '', fullName: user.full_name, userRole: user.role || 'user' });
+    setEditForm({ email: user.email || '', fullName: user.full_name, userRole: user.role || 'user', quotaGb: (parseInt(user.quota_bytes) / (1024 * 1024 * 1024)).toFixed(0) });
     setEditUser(user);
   };
 
@@ -150,7 +153,7 @@ const UsersManagement: React.FC = () => {
               <input className="modal-input" type="email" placeholder="user@example.com"
                 value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
               <label>Password</label>
-              <input className="modal-input" type="password" placeholder="Min 6 characters"
+              <input className="modal-input" type="password" placeholder="Min 8 chars, upper+lower+number"
                 value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
               <label>Role</label>
               <select className="modal-input" value={createForm.userRole}
@@ -193,6 +196,9 @@ const UsersManagement: React.FC = () => {
                 <option value="manager">Manager</option>
                 <option value="admin">Admin</option>
               </select>
+              <label>Quota (GB)</label>
+              <input className="modal-input" type="number" min="1" max="100" value={editForm.quotaGb}
+                onChange={(e) => setEditForm({ ...editForm, quotaGb: e.target.value })} />
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setEditUser(null)}>Cancel</button>
@@ -217,7 +223,7 @@ const UsersManagement: React.FC = () => {
                 Reset password for <strong>{resetPwUser.full_name}</strong> ({resetPwUser.email})
               </p>
               <label>New Password</label>
-              <input className="modal-input" type="password" placeholder="Min 6 characters"
+              <input className="modal-input" type="password" placeholder="Min 8 chars, upper+lower+number"
                 value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               <p style={{ fontSize: 12, color: '#f59e0b', margin: '8px 0 0' }}>
                 This will invalidate all active sessions for this user.

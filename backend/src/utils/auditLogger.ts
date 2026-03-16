@@ -3,7 +3,7 @@ import pool from '../config/database';
 export async function logAction(
   actorId: string | null,
   action: string,
-  targetType: 'file' | 'folder',
+  targetType: 'file' | 'folder' | 'user',
   targetId: string,
   metadata: any = {}
 ) {
@@ -17,6 +17,5 @@ export async function logAction(
     await pool.query(query, values);
   } catch (error) {
     console.error('Failed to log action:', error);
-    // Optional: Throw or handle failure
   }
 }

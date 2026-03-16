@@ -15,8 +15,7 @@ export async function authMiddleware(req: any, res: Response, next: NextFunction
     }
 
     const authHeader = req.headers.authorization;
-    const queryToken = req.query?.token as string | undefined;
-    const token = authHeader?.split(' ')[1] || queryToken;
+    const token = authHeader?.split(' ')[1];
 
     if (!token) {
       return res.status(401).json({ error: 'Token missing' });

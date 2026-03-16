@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import os from 'os';
 import cors from 'cors';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from './middleware/auth.js';
 import {
@@ -29,6 +30,12 @@ dotenv.config();
 
 const app = express();
 
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false,
+}));
+
 // CORS
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',')
@@ -43,6 +50,13 @@ app.use(cors({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const fileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -64,19 +78,19 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // Protected routes
 app.use(authMiddleware);
 
-// File routes
+// File routes (upload/delete have rate limiting)
 app.get('/files', listFiles);
 app.get('/files/deleted', listDeletedFiles);
-app.post('/files/upload', upload.single('file'), uploadFile);
-app.post('/files/folders', createFolder);
+app.post('/files/upload', fileLimiter, upload.single('file'), uploadFile);
+app.post('/files/folders', fileLimiter, createFolder);
 app.get('/files/:fileId/download', downloadFile);
 app.get('/files/:fileId/preview', previewFile);
 app.post('/files/:fileId/share', shareFile);
 app.put('/files/:fileId/rename', renameFile);
 app.post('/files/folders/:folderId/share', shareFolder);
 app.put('/files/folders/:folderId/rename', renameFolder);
-app.delete('/files/folders/:folderId', deleteFolder);
-app.delete('/files/:fileId', deleteFile);
+app.delete('/files/folders/:folderId', fileLimiter, deleteFolder);
+app.delete('/files/:fileId', fileLimiter, deleteFile);
 app.post('/files/:fileId/restore', restoreFile);
 
 // Audit routes
@@ -144,9 +158,26 @@ async function startup() {
     console.error('Startup error:', err);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
   });
+
+  // Graceful shutdown
+  const shutdown = (signal: string) => {
+    console.log(`${signal} received. Shutting down gracefully...`);
+    server.close(async () => {
+      try {
+        const { default: pool } = await import('./config/database.js');
+        await pool.end();
+        console.log('Database pool closed.');
+      } catch (e) { /* ignore */ }
+      process.exit(0);
+    });
+    setTimeout(() => { console.error('Forced shutdown'); process.exit(1); }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startup();

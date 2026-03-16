@@ -95,3 +95,30 @@ body {
 .text-info { color: var(--info); }
 .text-primary { color: var(--accent); }
 .text-secondary { color: var(--text-muted); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main-wrapper {
+    margin-left: 0;
+  }
+
+  .content-area {
+    margin-top: 56px;
+    padding: 16px;
+  }
+
+  .page-content {
+    padding: 16px;
+    min-height: auto;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-header {
+    left: 0;
+    height: 56px;
+    padding: 0 16px;
+  }
+}

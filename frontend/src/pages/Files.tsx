@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3, Eye,
-  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive
+  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/files.css';
@@ -45,28 +45,60 @@ const Files: React.FC = () => {
   const [shareAccess, setShareAccess] = useState('view');
   const [shareLoading, setShareLoading] = useState(false);
   const [previewModal, setPreviewModal] = useState<{id: string, name: string, mimeType: string} | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentFolder = pathStack[pathStack.length - 1];
 
-  const fetchFiles = async (folderId: string | null) => {
+  const fetchFiles = useCallback(async (folderId: string | null, search?: string) => {
     setLoading(true);
     try {
-      const response = await api.get(`/files?folderId=${folderId || ''}`);
+      const params = new URLSearchParams();
+      if (folderId) params.set('folderId', folderId);
+      if (search) params.set('search', search);
+      const response = await api.get(`/files?${params.toString()}`);
       setItems(response.data);
     } catch (err) {
       console.error('Failed to fetch files', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchFiles(currentFolder.id); }, [currentFolder.id]);
+  useEffect(() => { fetchFiles(currentFolder.id, searchTerm); }, [currentFolder.id, fetchFiles]);
+
   useEffect(() => {
     const handleClick = () => setOpenMenu(null);
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
   }, []);
+
+  // Blob-based preview (no token in URL)
+  useEffect(() => {
+    if (!previewModal) { setPreviewUrl(null); return; }
+    let url: string | null = null;
+    let cancelled = false;
+    api.get(`/files/${previewModal.id}/preview`, { responseType: 'blob' })
+      .then(res => {
+        if (cancelled) return;
+        url = URL.createObjectURL(res.data);
+        setPreviewUrl(url);
+      })
+      .catch(() => { if (!cancelled) setPreviewUrl(null); });
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [previewModal]);
+
+  const handleSearch = (term: string) => {
+    setSearchTerm(term);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      fetchFiles(currentFolder.id, term);
+    }, 300);
+  };
 
   const handleCreateFolder = async () => {
     const folderName = prompt('Enter folder name:');
@@ -74,7 +106,7 @@ const Files: React.FC = () => {
     try {
       setLoading(true);
       await api.post('/files/folders', { folderName, parentId: currentFolder.id });
-      fetchFiles(currentFolder.id);
+      fetchFiles(currentFolder.id, searchTerm);
     } catch (err) {
       alert('Failed to create folder');
     } finally {
@@ -84,22 +116,54 @@ const Files: React.FC = () => {
 
   const handleUploadClick = () => fileInputRef.current?.click();
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadSingleFile = async (file: globalThis.File) => {
     const formData = new FormData();
     formData.append('file', file);
     if (currentFolder.id) formData.append('folderId', currentFolder.id);
+    await api.post('/files/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      await api.post('/files/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      fetchFiles(currentFolder.id);
-      alert('File uploaded successfully!');
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(`Uploading ${i + 1}/${files.length}: ${files[i].name}`);
+        await uploadSingleFile(files[i]);
+      }
+      fetchFiles(currentFolder.id, searchTerm);
+      alert(`${files.length} file(s) uploaded successfully!`);
     } catch (err: any) {
       alert(err.response?.data?.error || 'Upload failed');
     } finally {
       setLoading(false);
+      setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Drag & drop
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    setLoading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(`Uploading ${i + 1}/${files.length}: ${files[i].name}`);
+        await uploadSingleFile(files[i]);
+      }
+      fetchFiles(currentFolder.id, searchTerm);
+      alert(`${files.length} file(s) uploaded successfully!`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -128,7 +192,7 @@ const Files: React.FC = () => {
       try {
         if (type === 'file') await api.delete(`/files/${id}`);
         else await api.delete(`/files/folders/${id}`);
-        fetchFiles(currentFolder.id);
+        fetchFiles(currentFolder.id, searchTerm);
       } catch (err) {
         alert('Failed to delete');
       }
@@ -141,7 +205,7 @@ const Files: React.FC = () => {
     try {
       if (type === 'file') await api.put(`/files/${id}/rename`, { newName });
       else await api.put(`/files/folders/${id}/rename`, { newName });
-      fetchFiles(currentFolder.id);
+      fetchFiles(currentFolder.id, searchTerm);
     } catch (err: any) {
       alert(err.response?.data?.error || 'Rename failed');
     }
@@ -167,15 +231,9 @@ const Files: React.FC = () => {
     }
   };
 
-  const enterFolder = (id: string, name: string) => setPathStack([...pathStack, { id, name }]);
-  const navigateTo = (index: number) => setPathStack(pathStack.slice(0, index + 1));
+  const enterFolder = (id: string, name: string) => { setSearchTerm(''); setPathStack([...pathStack, { id, name }]); };
+  const navigateTo = (index: number) => { setSearchTerm(''); setPathStack(pathStack.slice(0, index + 1)); };
   const toggleMenu = (e: React.MouseEvent, id: string) => { e.stopPropagation(); setOpenMenu(openMenu === id ? null : id); };
-
-  const getPreviewUrl = (fileId: string) => {
-    const baseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
-    const token = localStorage.getItem('token');
-    return `${baseUrl}/files/${fileId}/preview?token=${token}`;
-  };
 
   const formatSize = (size?: string) => {
     if (!size) return '--';
@@ -186,8 +244,16 @@ const Files: React.FC = () => {
   };
 
   return (
-    <div className="page-content">
-      <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+    <div className={`page-content ${isDragging ? 'drag-active' : ''}`}
+      onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} multiple />
+
+      {isDragging && (
+        <div className="drag-overlay">
+          <Upload size={48} />
+          <p>Drop files here to upload</p>
+        </div>
+      )}
 
       {/* Share Modal */}
       {shareModal && (
@@ -217,7 +283,7 @@ const Files: React.FC = () => {
         </div>
       )}
 
-      {/* PDF / Image Preview Modal */}
+      {/* Preview Modal (blob-based, secure) */}
       {previewModal && (
         <div className="modal-overlay preview-overlay" onClick={() => setPreviewModal(null)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
@@ -231,10 +297,12 @@ const Files: React.FC = () => {
               </div>
             </div>
             <div className="preview-body">
-              {previewModal.mimeType === 'application/pdf' ? (
-                <iframe src={getPreviewUrl(previewModal.id)} title="PDF Preview" className="preview-iframe" />
+              {!previewUrl ? (
+                <div className="loading">Loading preview...</div>
+              ) : previewModal.mimeType === 'application/pdf' ? (
+                <iframe src={previewUrl} title="PDF Preview" className="preview-iframe" />
               ) : previewModal.mimeType.startsWith('image/') ? (
-                <img src={getPreviewUrl(previewModal.id)} alt={previewModal.name} className="preview-image" />
+                <img src={previewUrl} alt={previewModal.name} className="preview-image" />
               ) : null}
             </div>
           </div>
@@ -251,10 +319,17 @@ const Files: React.FC = () => {
           ))}
         </div>
         <div className="actions">
+          <div className="search-box">
+            <Search size={16} />
+            <input type="text" placeholder="Search files..." value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)} />
+          </div>
           <button className="btn-primary" onClick={handleCreateFolder}><Plus size={18} /><span>New Folder</span></button>
-          <button className="btn-secondary" onClick={handleUploadClick}><Upload size={18} /><span>Upload File</span></button>
+          <button className="btn-secondary" onClick={handleUploadClick}><Upload size={18} /><span>Upload</span></button>
         </div>
       </div>
+
+      {uploadProgress && <div className="upload-progress">{uploadProgress}</div>}
 
       <div className="files-grid">
         <div className="grid-header">
@@ -267,7 +342,7 @@ const Files: React.FC = () => {
         {loading ? (
           <div className="loading">Processing...</div>
         ) : items.length === 0 ? (
-          <div className="empty-state">No files or folders here</div>
+          <div className="empty-state">{searchTerm ? 'No files match your search' : 'No files or folders here'}</div>
         ) : (
           items.map((item) => {
             const itemId = (item.file_id || item.folder_id)!;
