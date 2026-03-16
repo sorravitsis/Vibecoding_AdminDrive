@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Files, FolderOpen, Trash2, Upload, Clock, HardDrive } from 'lucide-react';
+import { Files, FolderOpen, Trash2, Upload, Clock, HardDrive, Loader, Inbox } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/dashboard.css';
+
+const formatAction = (action: string) => {
+  const map: Record<string, string> = {
+    upload: 'uploaded', delete: 'deleted', delete_external: 'deleted (external)',
+    restore: 'restored', download: 'downloaded', share: 'shared',
+    rename: 'renamed', create: 'created', suspend: 'suspended',
+    activate: 'activated', create_user: 'created user', update_user: 'updated user',
+    reset_password: 'reset password for', login: 'logged in', login_failed: 'failed login',
+  };
+  return map[action] || action;
+};
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -15,7 +26,7 @@ const Dashboard: React.FC = () => {
       try {
         const [storageRes, activityRes, filesRes, deletedRes] = await Promise.all([
           api.get('/me/storage'),
-          api.get('/activity'),
+          api.get('/activity?page=1&limit=8'),
           api.get('/files'),
           api.get('/files/deleted'),
         ]);
@@ -28,7 +39,7 @@ const Dashboard: React.FC = () => {
           folderCount: items.filter((i: any) => i.type === 'folder').length,
           deletedCount: deletedRes.data.length,
         });
-        setRecentActivity(activityRes.data.slice(0, 8));
+        setRecentActivity(activityRes.data.data || []);
       } catch (err) {
         console.error('Dashboard error:', err);
       } finally {
@@ -41,7 +52,7 @@ const Dashboard: React.FC = () => {
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
@@ -56,7 +67,11 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="page-content"><div className="loading">Loading dashboard...</div></div>;
+  if (loading) return (
+    <div className="page-content">
+      <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading dashboard...</span></div>
+    </div>
+  );
 
   return (
     <div className="page-content">
@@ -106,7 +121,10 @@ const Dashboard: React.FC = () => {
       <div className="dashboard-activity">
         <h3>Recent Activity</h3>
         {recentActivity.length === 0 ? (
-          <p className="empty-state">No recent activity</p>
+          <div className="empty-state-box">
+            <Inbox size={40} />
+            <p>No recent activity</p>
+          </div>
         ) : (
           <div className="activity-mini-list">
             {recentActivity.map((log, idx) => (
@@ -114,8 +132,8 @@ const Dashboard: React.FC = () => {
                 <div className="activity-mini-icon">{getActionIcon(log.action)}</div>
                 <div className="activity-mini-text">
                   <span className="activity-mini-actor">{log.actor_name || 'System'}</span>
-                  <span className="activity-mini-action">{log.action}ed</span>
-                  <span className="activity-mini-target">{log.file_name || log.folder_name}</span>
+                  <span className="activity-mini-action">{formatAction(log.action)}</span>
+                  <span className="activity-mini-target">{log.file_name || log.folder_name || ''}</span>
                 </div>
                 <span className="activity-mini-time">{new Date(log.created_at).toLocaleString()}</span>
               </div>

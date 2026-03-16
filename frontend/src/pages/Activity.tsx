@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Upload, Trash2, RotateCcw, Download, Share2, Edit3, User, Clock, Shield, ChevronLeft, ChevronRight
+  Upload, Trash2, RotateCcw, Download, Share2, Edit3, User, Clock, Shield, ChevronLeft, ChevronRight, Loader, Inbox
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/activity.css';
@@ -64,7 +64,8 @@ const ActivityStream: React.FC = () => {
       restore: 'restored', download: 'downloaded', share: 'shared',
       rename: 'renamed', create: 'created', suspend: 'suspended',
       activate: 'activated', create_user: 'created user', update_user: 'updated user',
-      reset_password: 'reset password for',
+      reset_password: 'reset password for', login: 'logged in', login_failed: 'failed login',
+      reconcile_quotas: 'reconciled quotas', cleanup_orphans: 'cleaned up orphans',
     };
     return map[action] || action;
   };
@@ -78,9 +79,9 @@ const ActivityStream: React.FC = () => {
 
       <div className="activity-list">
         {loading ? (
-          <div className="loading">Loading activities...</div>
+          <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading activities...</span></div>
         ) : logs.length === 0 ? (
-          <div className="empty-state">No recent activity</div>
+          <div className="empty-state-box"><Inbox size={48} /><p>No recent activity</p></div>
         ) : (
           logs.map((log, idx) => (
             <div key={idx} className="activity-item">

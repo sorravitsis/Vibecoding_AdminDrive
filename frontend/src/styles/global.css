@@ -88,6 +88,16 @@ body {
   background: var(--border-light);
 }
 
+/* Spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Shared utilities */
 .text-danger { color: var(--danger); }
 .text-warning { color: var(--warning); }
@@ -112,9 +122,7 @@ body {
     min-height: auto;
   }
 
-  .sidebar {
-    display: none;
-  }
+  /* sidebar mobile handled in sidebar.css */
 
   .main-header {
     left: 0;

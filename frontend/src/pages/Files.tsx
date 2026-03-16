@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3, Eye,
-  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search
+  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search, Loader, FolderOpen
 } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '../context/ToastContext';
 import '../styles/files.css';
 
 interface FileItem {
@@ -35,7 +36,17 @@ const isPreviewable = (mimeType?: string) => {
   return mimeType === 'application/pdf' || mimeType.startsWith('image/');
 };
 
+const formatSize = (size?: string) => {
+  if (!size) return '--';
+  const bytes = parseInt(size);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
+
 const Files: React.FC = () => {
+  const { showToast } = useToast();
   const [items, setItems] = useState<FileItem[]>([]);
   const [pathStack, setPathStack] = useState<{id: string | null, name: string}[]>([{id: null, name: 'My Drive'}]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +60,10 @@ const Files: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  // Confirm/Prompt modals
+  const [confirmModal, setConfirmModal] = useState<{message: string, onConfirm: () => void} | null>(null);
+  const [promptModal, setPromptModal] = useState<{title: string, defaultValue: string, onSubmit: (val: string) => void} | null>(null);
+  const [promptValue, setPromptValue] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,7 +92,6 @@ const Files: React.FC = () => {
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
-  // Blob-based preview (no token in URL)
   useEffect(() => {
     if (!previewModal) { setPreviewUrl(null); return; }
     let url: string | null = null;
@@ -100,18 +114,25 @@ const Files: React.FC = () => {
     }, 300);
   };
 
-  const handleCreateFolder = async () => {
-    const folderName = prompt('Enter folder name:');
-    if (!folderName) return;
-    try {
-      setLoading(true);
-      await api.post('/files/folders', { folderName, parentId: currentFolder.id });
-      fetchFiles(currentFolder.id, searchTerm);
-    } catch (err) {
-      alert('Failed to create folder');
-    } finally {
-      setLoading(false);
-    }
+  const handleCreateFolder = () => {
+    setPromptValue('');
+    setPromptModal({
+      title: 'New Folder',
+      defaultValue: '',
+      onSubmit: async (folderName) => {
+        if (!folderName) return;
+        try {
+          setLoading(true);
+          await api.post('/files/folders', { folderName, parentId: currentFolder.id });
+          showToast(`Folder "${folderName}" created`, 'success');
+          fetchFiles(currentFolder.id, searchTerm);
+        } catch (err) {
+          showToast('Failed to create folder', 'error');
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   const handleUploadClick = () => fileInputRef.current?.click();
@@ -133,9 +154,9 @@ const Files: React.FC = () => {
         await uploadSingleFile(files[i]);
       }
       fetchFiles(currentFolder.id, searchTerm);
-      alert(`${files.length} file(s) uploaded successfully!`);
+      showToast(`${files.length} file(s) uploaded successfully!`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Upload failed');
+      showToast(err.response?.data?.error || 'Upload failed', 'error');
     } finally {
       setLoading(false);
       setUploadProgress(null);
@@ -143,7 +164,6 @@ const Files: React.FC = () => {
     }
   };
 
-  // Drag & drop
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = async (e: React.DragEvent) => {
@@ -158,9 +178,9 @@ const Files: React.FC = () => {
         await uploadSingleFile(files[i]);
       }
       fetchFiles(currentFolder.id, searchTerm);
-      alert(`${files.length} file(s) uploaded successfully!`);
+      showToast(`${files.length} file(s) uploaded successfully!`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Upload failed');
+      showToast(err.response?.data?.error || 'Upload failed', 'error');
     } finally {
       setLoading(false);
       setUploadProgress(null);
@@ -179,7 +199,7 @@ const Files: React.FC = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Download failed');
+      showToast('Download failed', 'error');
     }
   };
 
@@ -187,28 +207,39 @@ const Files: React.FC = () => {
     setPreviewModal({ id: fileId, name: fileName, mimeType });
   };
 
-  const handleDelete = async (id: string, type: 'file' | 'folder') => {
-    if (window.confirm(`Move this ${type} to recycle bin?`)) {
-      try {
-        if (type === 'file') await api.delete(`/files/${id}`);
-        else await api.delete(`/files/folders/${id}`);
-        fetchFiles(currentFolder.id, searchTerm);
-      } catch (err) {
-        alert('Failed to delete');
+  const handleDelete = (id: string, type: 'file' | 'folder') => {
+    setConfirmModal({
+      message: `Move this ${type} to recycle bin?`,
+      onConfirm: async () => {
+        try {
+          if (type === 'file') await api.delete(`/files/${id}`);
+          else await api.delete(`/files/folders/${id}`);
+          showToast(`${type === 'file' ? 'File' : 'Folder'} moved to recycle bin`, 'success');
+          fetchFiles(currentFolder.id, searchTerm);
+        } catch (err) {
+          showToast('Failed to delete', 'error');
+        }
       }
-    }
+    });
   };
 
-  const handleRename = async (id: string, type: 'file' | 'folder', currentName: string) => {
-    const newName = prompt('Enter new name:', currentName);
-    if (!newName || newName === currentName) return;
-    try {
-      if (type === 'file') await api.put(`/files/${id}/rename`, { newName });
-      else await api.put(`/files/folders/${id}/rename`, { newName });
-      fetchFiles(currentFolder.id, searchTerm);
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Rename failed');
-    }
+  const handleRename = (id: string, type: 'file' | 'folder', currentName: string) => {
+    setPromptValue(currentName);
+    setPromptModal({
+      title: `Rename ${type}`,
+      defaultValue: currentName,
+      onSubmit: async (newName) => {
+        if (!newName || newName === currentName) return;
+        try {
+          if (type === 'file') await api.put(`/files/${id}/rename`, { newName });
+          else await api.put(`/files/folders/${id}/rename`, { newName });
+          showToast(`Renamed to "${newName}"`, 'success');
+          fetchFiles(currentFolder.id, searchTerm);
+        } catch (err: any) {
+          showToast(err.response?.data?.error || 'Rename failed', 'error');
+        }
+      }
+    });
   };
 
   const handleShare = async () => {
@@ -220,28 +251,20 @@ const Files: React.FC = () => {
       } else {
         await api.post(`/files/folders/${shareModal.id}/share`, { email: shareEmail, accessLevel: shareAccess });
       }
-      alert(`Shared "${shareModal.name}" with ${shareEmail}`);
+      showToast(`Shared "${shareModal.name}" with ${shareEmail}`, 'success');
       setShareModal(null);
       setShareEmail('');
       setShareAccess('view');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Share failed');
+      showToast(err.response?.data?.error || 'Share failed', 'error');
     } finally {
       setShareLoading(false);
     }
   };
 
   const enterFolder = (id: string, name: string) => { setSearchTerm(''); setPathStack([...pathStack, { id, name }]); };
-  const navigateTo = (index: number) => { setSearchTerm(''); setPathStack(pathStack.slice(0, index + 1)); };
+  const navigateTo = (index: number) => { if (index < pathStack.length - 1) { setSearchTerm(''); setPathStack(pathStack.slice(0, index + 1)); } };
   const toggleMenu = (e: React.MouseEvent, id: string) => { e.stopPropagation(); setOpenMenu(openMenu === id ? null : id); };
-
-  const formatSize = (size?: string) => {
-    if (!size) return '--';
-    const bytes = parseInt(size);
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   return (
     <div className={`page-content ${isDragging ? 'drag-active' : ''}`}
@@ -252,6 +275,49 @@ const Files: React.FC = () => {
         <div className="drag-overlay">
           <Upload size={48} />
           <p>Drop files here to upload</p>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirm</h3>
+              <button className="modal-close" onClick={() => setConfirmModal(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{confirmModal.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
+              <button className="btn-primary" onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Modal */}
+      {promptModal && (
+        <div className="modal-overlay" onClick={() => setPromptModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{promptModal.title}</h3>
+              <button className="modal-close" onClick={() => setPromptModal(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <label>Name</label>
+              <input className="modal-input" autoFocus value={promptValue}
+                onChange={(e) => setPromptValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { promptModal.onSubmit(promptValue); setPromptModal(null); } }} />
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setPromptModal(null)}>Cancel</button>
+              <button className="btn-primary" onClick={() => { promptModal.onSubmit(promptValue); setPromptModal(null); }}>
+                OK
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -283,7 +349,7 @@ const Files: React.FC = () => {
         </div>
       )}
 
-      {/* Preview Modal (blob-based, secure) */}
+      {/* Preview Modal */}
       {previewModal && (
         <div className="modal-overlay preview-overlay" onClick={() => setPreviewModal(null)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
@@ -298,7 +364,7 @@ const Files: React.FC = () => {
             </div>
             <div className="preview-body">
               {!previewUrl ? (
-                <div className="loading">Loading preview...</div>
+                <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading preview...</span></div>
               ) : previewModal.mimeType === 'application/pdf' ? (
                 <iframe src={previewUrl} title="PDF Preview" className="preview-iframe" />
               ) : previewModal.mimeType.startsWith('image/') ? (
@@ -313,7 +379,10 @@ const Files: React.FC = () => {
         <div className="breadcrumb">
           {pathStack.map((crumb, idx) => (
             <React.Fragment key={idx}>
-              <span onClick={() => navigateTo(idx)}>{crumb.name}</span>
+              <span
+                className={idx === pathStack.length - 1 ? 'breadcrumb-current' : 'breadcrumb-link'}
+                onClick={() => navigateTo(idx)}
+              >{crumb.name}</span>
               {idx < pathStack.length - 1 && <ChevronRight size={16} />}
             </React.Fragment>
           ))}
@@ -340,9 +409,13 @@ const Files: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="loading">Processing...</div>
+          <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading files...</span></div>
         ) : items.length === 0 ? (
-          <div className="empty-state">{searchTerm ? 'No files match your search' : 'No files or folders here'}</div>
+          <div className="empty-state-box">
+            <FolderOpen size={48} />
+            <p>{searchTerm ? 'No files match your search' : 'No files or folders here'}</p>
+            <span>Upload files or create a folder to get started</span>
+          </div>
         ) : (
           items.map((item) => {
             const itemId = (item.file_id || item.folder_id)!;

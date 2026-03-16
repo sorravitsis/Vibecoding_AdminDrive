@@ -5,9 +5,12 @@ import {
   UserPlus,
   X,
   Edit3,
-  Key
+  Key,
+  Loader,
+  Users
 } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '../context/ToastContext';
 import '../styles/users.css';
 
 interface UserStats {
@@ -22,6 +25,7 @@ interface UserStats {
 }
 
 const UsersManagement: React.FC = () => {
+  const { showToast } = useToast();
   const [users, setUsers] = useState<UserStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -36,18 +40,18 @@ const UsersManagement: React.FC = () => {
 
   const handleCreateUser = async () => {
     if (!createForm.email || !createForm.fullName || !createForm.password) {
-      alert('Please fill all fields');
+      showToast('Please fill all fields', 'warning');
       return;
     }
     setCreating(true);
     try {
       await api.post('/admin/users', createForm);
-      alert('User created successfully!');
+      showToast('User created successfully!', 'success');
       setShowCreate(false);
       setCreateForm({ email: '', fullName: '', password: '', userRole: 'user' });
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create user');
+      showToast(err.response?.data?.error || 'Failed to create user', 'error');
     } finally {
       setCreating(false);
     }
@@ -61,11 +65,11 @@ const UsersManagement: React.FC = () => {
         ...editForm,
         quotaBytes: Math.round(parseFloat(editForm.quotaGb) * 1024 * 1024 * 1024),
       });
-      alert('User updated successfully!');
+      showToast('User updated successfully!', 'success');
       setEditUser(null);
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update user');
+      showToast(err.response?.data?.error || 'Failed to update user', 'error');
     } finally {
       setSaving(false);
     }
@@ -74,17 +78,17 @@ const UsersManagement: React.FC = () => {
   const handleResetPassword = async () => {
     if (!resetPwUser || !newPassword) return;
     if (newPassword.length < 8) {
-      alert('Password must be at least 8 characters with upper+lower+number');
+      showToast('Password must be at least 8 characters with upper+lower+number', 'warning');
       return;
     }
     setResetting(true);
     try {
       await api.put(`/admin/users/${resetPwUser.user_id}/reset-password`, { newPassword });
-      alert('Password reset successfully! All user sessions invalidated.');
+      showToast('Password reset successfully! All sessions invalidated.', 'success');
       setResetPwUser(null);
       setNewPassword('');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to reset password');
+      showToast(err.response?.data?.error || 'Failed to reset password', 'error');
     } finally {
       setResetting(false);
     }
@@ -111,19 +115,26 @@ const UsersManagement: React.FC = () => {
     fetchUsers();
   }, []);
 
-  const handleToggleStatus = async (userId: string, currentStatus: string) => {
+  const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void} | null>(null);
+
+  const handleToggleStatus = (userId: string, currentStatus: string) => {
     const action = currentStatus === 'suspended' ? 'activate' : 'suspend';
-    if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
-    try {
-      if (currentStatus === 'suspended') {
-        await api.put(`/admin/users/${userId}/activate`);
-      } else {
-        await api.put(`/admin/users/${userId}/suspend`);
+    setConfirmAction({
+      message: `Are you sure you want to ${action} this user?`,
+      onConfirm: async () => {
+        try {
+          if (currentStatus === 'suspended') {
+            await api.put(`/admin/users/${userId}/activate`);
+          } else {
+            await api.put(`/admin/users/${userId}/suspend`);
+          }
+          showToast(`User ${action}d successfully`, 'success');
+          fetchUsers();
+        } catch (err) {
+          showToast('Failed to update user status', 'error');
+        }
       }
-      fetchUsers();
-    } catch (err) {
-      alert('Failed to update user status');
-    }
+    });
   };
 
   const formatBytes = (bytes: string) => {
@@ -137,6 +148,25 @@ const UsersManagement: React.FC = () => {
 
   return (
     <div className="page-content">
+      {/* Confirm Action Modal */}
+      {confirmAction && (
+        <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirm</h3>
+              <button className="modal-close" onClick={() => setConfirmAction(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{confirmAction.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button className="btn-primary" onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create User Modal */}
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
@@ -249,7 +279,9 @@ const UsersManagement: React.FC = () => {
 
       <div className="users-table-container">
         {loading ? (
-          <div className="loading">Loading user data...</div>
+          <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading user data...</span></div>
+        ) : users.length === 0 ? (
+          <div className="empty-state-box"><Users size={48} /><p>No users found</p></div>
         ) : (
           <table className="users-table">
             <thead>
