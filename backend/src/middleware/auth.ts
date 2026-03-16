@@ -10,6 +10,10 @@ interface JwtPayload {
 
 export async function authMiddleware(req: any, res: Response, next: NextFunction) {
   try {
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: 'Server misconfiguration' });
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       return res.status(401).json({ error: 'Authorization header missing' });

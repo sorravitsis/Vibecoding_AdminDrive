@@ -1,28 +1,49 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 
+export const loginValidation = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isString().isLength({ min: 1 }),
+];
+
 export const login = async (req: Request, res: Response) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET is not configured');
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+
   const { email, password } = req.body;
 
   try {
-    // 1. Find user (In real app, verify password with bcrypt)
     const { rows } = await pool.query(
-      'SELECT user_id, email, full_name, role, token_version, status FROM users WHERE email = $1',
+      'SELECT user_id, email, full_name, role, token_version, status, password_hash FROM users WHERE email = $1',
       [email]
     );
 
     const user = rows[0];
 
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+    if (!user || !user.password_hash) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     if (user.status === 'suspended') {
       return res.status(403).json({ error: 'Account is suspended' });
     }
 
-    // 2. Generate JWT (Phase 4: include tokenVersion)
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
     const token = jwt.sign(
       {
         userId: user.user_id,
@@ -31,7 +52,7 @@ export const login = async (req: Request, res: Response) => {
         role: user.role,
         tokenVersion: user.token_version,
       },
-      process.env.JWT_SECRET || 'secret',
+      JWT_SECRET,
       { expiresIn: '8h' }
     );
 
@@ -45,6 +66,7 @@ export const login = async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,12 +21,11 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor to handle session expiration (Phase 4)
+// Add a response interceptor to handle session expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // If token is invalid or expired, logout user
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

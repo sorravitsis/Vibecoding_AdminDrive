@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import pool from '../../config/database';
 
 async function seed() {
@@ -6,11 +7,9 @@ async function seed() {
     await client.query('BEGIN');
 
     console.log('Seeding users...');
-    
-    // 1. Clear existing users (Optional - handle with care)
-    // await client.query('DELETE FROM users');
 
-    // 2. Insert Users
+    const defaultPassword = await bcrypt.hash('ChangeMe123!', 12);
+
     const users = [
       { email: 'admin@example.com', name: 'System Admin', role: 'admin' },
       { email: 'manager@example.com', name: 'Dept Manager', role: 'manager' },
@@ -19,15 +18,16 @@ async function seed() {
 
     for (const u of users) {
       await client.query(`
-        INSERT INTO users (email, full_name, role, status, quota_bytes)
-        VALUES ($1, $2, $3, 'active', 5368709120)
-        ON CONFLICT (email) DO UPDATE SET 
+        INSERT INTO users (email, full_name, role, status, quota_bytes, password_hash)
+        VALUES ($1, $2, $3, 'active', 5368709120, $4)
+        ON CONFLICT (email) DO UPDATE SET
           full_name = EXCLUDED.full_name,
-          role = EXCLUDED.role
-      `, [u.email, u.name, u.role]);
+          role = EXCLUDED.role,
+          password_hash = EXCLUDED.password_hash
+      `, [u.email, u.name, u.role, defaultPassword]);
     }
 
-    // 3. Create a Root Folder if none exists
+    // Create a Root Folder if none exists
     console.log('Seeding folders...');
     await client.query(`
       INSERT INTO folders (name, google_folder_id)
@@ -37,6 +37,7 @@ async function seed() {
 
     await client.query('COMMIT');
     console.log('Seed completed successfully!');
+    console.log('Default password for all users: ChangeMe123!');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Seed failed:', err);
