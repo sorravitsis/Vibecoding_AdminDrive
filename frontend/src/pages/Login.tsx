@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Warehouse, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Warehouse, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/login.css';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -20,8 +21,8 @@ const Login: React.FC = () => {
 
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { user } = response.data;
-      login(user);
+      const { token, user } = response.data;
+      login(token, user);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to login');
@@ -63,12 +64,20 @@ const Login: React.FC = () => {
             <div className="input-wrapper">
               <Lock size={18} className="input-icon" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 required
               />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
           <button type="submit" disabled={loading} className="login-btn">

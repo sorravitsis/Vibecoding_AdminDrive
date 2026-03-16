@@ -104,9 +104,26 @@
   pointer-events: none;
 }
 
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: var(--transition);
+}
+
+.password-toggle:hover {
+  color: var(--text-primary);
+}
+
 .input-wrapper input {
   width: 100%;
-  padding: 12px 14px 12px 44px;
+  padding: 12px 44px 12px 44px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

@@ -93,6 +93,7 @@ export const login = async (req: Request, res: Response) => {
     });
 
     res.json({
+      token, // fallback for cross-origin where cookies may be blocked
       user: {
         userId: user.user_id,
         email: user.email,

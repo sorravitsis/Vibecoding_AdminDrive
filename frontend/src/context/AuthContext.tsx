@@ -10,7 +10,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (userData: User) => void;
+  login: (token: string, userData: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -29,8 +29,10 @@ const getSavedUser = (): User | null => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(getSavedUser);
 
-  const login = (userData: User) => {
-    // Token is now stored in httpOnly cookie by the server
+  const login = (token: string, userData: User) => {
+    // Store token in localStorage as fallback for cross-origin cookie issues
+    // Primary auth is httpOnly cookie set by server
+    if (token) localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
@@ -41,6 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // ignore — cookie will expire anyway
     }
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   };
