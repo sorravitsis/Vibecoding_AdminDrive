@@ -10,12 +10,11 @@ export const suspendUser = async (req: any, res: Response) => {
   }
 
   try {
-    // Phase 4: Suspend + Invalidate (increment token_version)
     const query = `
-      UPDATE users SET 
-        status = 'suspended', 
-        token_version = token_version + 1, 
-        updated_at = NOW() 
+      UPDATE users SET
+        status = 'suspended',
+        token_version = token_version + 1,
+        updated_at = NOW()
       WHERE user_id = $1
     `;
     await pool.query(query, [userId]);
@@ -35,9 +34,9 @@ export const activateUser = async (req: any, res: Response) => {
 
   try {
     const query = `
-      UPDATE users SET 
-        status = 'active', 
-        updated_at = NOW() 
+      UPDATE users SET
+        status = 'active',
+        updated_at = NOW()
       WHERE user_id = $1
     `;
     await pool.query(query, [userId]);
@@ -55,17 +54,37 @@ export const getStorageStats = async (req: any, res: Response) => {
   }
 
   try {
-    // Phase 6: O(1) storage stats
     const query = `
-      SELECT 
-        full_name, 
-        used_bytes, 
-        quota_bytes, 
+      SELECT
+        user_id,
+        email,
+        full_name,
+        status,
+        role,
+        used_bytes,
+        quota_bytes,
         ROUND(used_bytes * 100.0 / quota_bytes, 1) AS pct
       FROM users
+      ORDER BY full_name
     `;
     const { rows } = await pool.query(query);
     res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getMyStorage = async (req: any, res: Response) => {
+  const { userId } = req.user;
+
+  try {
+    const query = `
+      SELECT used_bytes, quota_bytes,
+        ROUND(used_bytes * 100.0 / quota_bytes, 1) AS pct
+      FROM users WHERE user_id = $1
+    `;
+    const { rows } = await pool.query(query, [userId]);
+    res.json(rows[0] || { used_bytes: '0', quota_bytes: '5368709120', pct: '0' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

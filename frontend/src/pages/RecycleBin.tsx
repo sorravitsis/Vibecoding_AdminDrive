@@ -10,11 +10,8 @@ const RecycleBin: React.FC = () => {
   const fetchDeletedFiles = async () => {
     setLoading(true);
     try {
-      // Fetch activity logs and filter for 'delete' actions to show in recycle bin
-      // In a real app, you might have a dedicated /files/deleted endpoint
-      const response = await api.get('/activity');
-      const deletes = response.data.filter((a: any) => a.action === 'delete');
-      setDeletedFiles(deletes);
+      const response = await api.get('/files/deleted');
+      setDeletedFiles(response.data);
     } catch (err) {
       console.error('Failed to fetch deleted files', err);
     } finally {
@@ -61,22 +58,22 @@ const RecycleBin: React.FC = () => {
             <div key={idx} className="grid-row">
               <div className="col-name">
                 <File className="icon-file" size={20} />
-                <span>{item.file_name}</span>
+                <span>{item.name}</span>
               </div>
               <div className="col-size">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <User size={14} /> {item.actor_name}
+                  <User size={14} /> {item.deleted_by_name || 'Unknown'}
                 </div>
               </div>
               <div className="col-date">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={14} /> {new Date(item.created_at).toLocaleDateString()}
+                  <Clock size={14} /> {new Date(item.deleted_at).toLocaleDateString()}
                 </div>
               </div>
               <div className="col-actions">
                 <div className="action-menu">
                   <div className="dropdown" style={{ display: 'block', position: 'static', border: 'none', boxShadow: 'none', background: 'none' }}>
-                    <button style={{ color: '#28a745', padding: '4px' }} onClick={() => handleRestore(item.target_id)}>
+                    <button style={{ color: '#28a745', padding: '4px' }} onClick={() => handleRestore(item.file_id)}>
                       <RotateCcw size={16} />
                     </button>
                   </div>

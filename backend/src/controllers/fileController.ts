@@ -26,6 +26,7 @@ export const uploadFile = async (req: any, res: Response) => {
     const googleParentId = await getGoogleFolderId(folderId);
 
     const driveRes = await drive.files.create({
+      supportsAllDrives: true,
       requestBody: {
         name: file.originalname,
         parents: [googleParentId],
@@ -75,6 +76,7 @@ export const createFolder = async (req: any, res: Response) => {
     const googleParentId = await getGoogleFolderId(pId);
 
     const driveRes = await drive.files.create({
+      supportsAllDrives: true,
       requestBody: {
         name: folderName,
         mimeType: 'application/vnd.google-apps.folder',
@@ -135,6 +137,44 @@ export const listFiles = async (req: any, res: Response) => {
     res.json([...foldersRes.rows, ...filesRes.rows]);
   } catch (err: any) {
     console.error('List files error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const listDeletedFiles = async (req: any, res: Response) => {
+  const { userId, role } = req.user;
+
+  try {
+    let query;
+    let values: any[] = [];
+
+    if (role === 'admin' || role === 'manager') {
+      query = `
+        SELECT f.file_id, f.file_name as name, f.file_size, f.deleted_at, f.deleted_by,
+               u.full_name as deleted_by_name
+        FROM files f
+        LEFT JOIN users u ON u.user_id = f.deleted_by
+        WHERE f.status = 'deleted'
+        ORDER BY f.deleted_at DESC
+        LIMIT 50
+      `;
+    } else {
+      query = `
+        SELECT f.file_id, f.file_name as name, f.file_size, f.deleted_at, f.deleted_by,
+               u.full_name as deleted_by_name
+        FROM files f
+        LEFT JOIN users u ON u.user_id = f.deleted_by
+        WHERE f.status = 'deleted' AND f.uploader_id = $1
+        ORDER BY f.deleted_at DESC
+        LIMIT 50
+      `;
+      values = [userId];
+    }
+
+    const { rows } = await pool.query(query, values);
+    res.json(rows);
+  } catch (err: any) {
+    console.error('List deleted files error:', err);
     res.status(500).json({ error: err.message });
   }
 };

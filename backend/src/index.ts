@@ -11,10 +11,11 @@ import {
   deleteFolder,
   restoreFile,
   listFiles,
+  listDeletedFiles,
   createFolder
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
-import { suspendUser, activateUser, getStorageStats } from './controllers/userController.js';
+import { suspendUser, activateUser, getStorageStats, getMyStorage } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
 import { login, loginValidation } from './controllers/authController.js';
 
@@ -59,6 +60,7 @@ app.use(authMiddleware);
 
 // File routes
 app.get('/files', listFiles);
+app.get('/files/deleted', listDeletedFiles);
 app.post('/files/upload', upload.single('file'), uploadFile);
 app.post('/files/folders', createFolder);
 app.delete('/files/folders/:folderId', deleteFolder);
@@ -69,7 +71,10 @@ app.post('/files/:fileId/restore', restoreFile);
 app.get('/activity', getActivityStream);
 app.get('/activity/user/:userId', getUserActivity);
 
-// User/Admin routes
+// User routes (any authenticated user)
+app.get('/me/storage', getMyStorage);
+
+// Admin routes
 app.put('/admin/users/:userId/suspend', suspendUser);
 app.put('/admin/users/:userId/activate', activateUser);
 app.get('/admin/storage-stats', getStorageStats);

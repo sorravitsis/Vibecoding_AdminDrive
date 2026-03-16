@@ -93,7 +93,7 @@ const UsersManagement: React.FC = () => {
                       </div>
                       <div className="user-info-text">
                         <span className="user-name">{user.full_name}</span>
-                        <span className="user-email">user@example.com</span>
+                        <span className="user-email">{user.email || ''}</span>
                       </div>
                     </div>
                   </td>
