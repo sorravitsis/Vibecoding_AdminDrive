@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import api from '../utils/api';
 
 interface User {
   userId: string;
@@ -9,7 +10,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (token: string, userData: User) => void;
+  login: (userData: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -28,14 +29,18 @@ const getSavedUser = (): User | null => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(getSavedUser);
 
-  const login = (token: string, userData: User) => {
-    localStorage.setItem('token', token);
+  const login = (userData: User) => {
+    // Token is now stored in httpOnly cookie by the server
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // ignore — cookie will expire anyway
+    }
     localStorage.removeItem('user');
     setUser(null);
   };

@@ -4,6 +4,7 @@ import multer from 'multer';
 import os from 'os';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from './middleware/auth.js';
 import {
@@ -24,7 +25,8 @@ import {
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
-import { login, loginValidation } from './controllers/authController.js';
+import { login, loginValidation, logout } from './controllers/authController.js';
+import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenanceController.js';
 
 dotenv.config();
 
@@ -45,6 +47,9 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
+
+// Cookie parser
+app.use(cookieParser());
 
 // Rate limiting
 const authLimiter = rateLimit({
@@ -68,6 +73,7 @@ const PORT = process.env.PORT || 3000;
 
 // Auth routes
 app.post('/auth/login', authLimiter, loginValidation, login);
+app.post('/auth/logout', logout);
 
 // Webhook endpoint
 app.post('/webhooks/drive', handleDriveWebhook);
@@ -107,6 +113,10 @@ app.put('/admin/users/:userId/activate', activateUser);
 app.put('/admin/users/:userId/reset-password', resetPassword);
 app.put('/admin/users/:userId', updateUser);
 app.get('/admin/storage-stats', getStorageStats);
+
+// Maintenance routes (admin only)
+app.post('/admin/maintenance/reconcile-quotas', reconcileQuotas);
+app.post('/admin/maintenance/cleanup-orphans', cleanupOrphanedFiles);
 
 // Auto migrate and seed on startup
 async function startup() {

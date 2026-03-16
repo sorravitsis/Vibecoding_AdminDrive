@@ -14,8 +14,8 @@ export async function authMiddleware(req: any, res: Response, next: NextFunction
       return res.status(500).json({ error: 'Server misconfiguration' });
     }
 
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
+    // Read token from httpOnly cookie first, fallback to Authorization header
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
 
     if (!token) {
       return res.status(401).json({ error: 'Token missing' });

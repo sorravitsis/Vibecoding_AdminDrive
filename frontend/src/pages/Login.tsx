@@ -20,8 +20,8 @@ const Login: React.FC = () => {
 
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { token, user } = response.data;
-      login(token, user);
+      const { user } = response.data;
+      login(user);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to login');
