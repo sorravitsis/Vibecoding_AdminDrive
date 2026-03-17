@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import NotificationDropdown from './NotificationDropdown';
 import api from '../utils/api';
 import '../styles/header.css';
 
@@ -36,8 +37,9 @@ const Header: React.FC = () => {
         <h1 className="page-title">SiS Warehouse</h1>
       </div>
       <div className="header-right">
+        <NotificationDropdown />
         <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
         <div className="quota-container">
           <div className="quota-info">

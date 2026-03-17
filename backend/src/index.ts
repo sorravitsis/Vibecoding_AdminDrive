@@ -38,6 +38,8 @@ import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, u
 import { handleDriveWebhook } from './controllers/webhookController.js';
 import { login, loginValidation, logout, getProfile, changePassword } from './controllers/authController.js';
 import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenanceController.js';
+import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from './controllers/notificationController.js';
+import { getDashboardStats } from './controllers/dashboardController.js';
 
 dotenv.config();
 
@@ -102,6 +104,15 @@ app.use(authMiddleware);
 app.get('/auth/profile', getProfile);
 app.put('/auth/password', changePassword);
 
+// Notification routes (static before param)
+app.get('/notifications', getNotifications);
+app.get('/notifications/unread-count', getUnreadCount);
+app.put('/notifications/mark-all-read', markAllAsRead);
+app.put('/notifications/:notificationId/read', markAsRead);
+
+// Dashboard
+app.get('/dashboard/stats', getDashboardStats);
+
 // ── Static file routes MUST come before /:fileId param routes ─────────────────
 app.get('/files', listFiles);
 app.get('/files/deleted', listDeletedFiles);
@@ -161,15 +172,32 @@ async function startup() {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
-    // Run migrations
+    // Run migrations with tracking (each migration runs only once)
     const migrationsDir = path.join(__dirname, 'database/migrations');
-    const files = fs.readdirSync(migrationsDir).sort();
+    const migrationFiles = fs.readdirSync(migrationsDir).filter((f: string) => f.endsWith('.sql')).sort();
     const client = await pool.connect();
+
+    // Create migration tracking table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    const { rows: applied } = await client.query('SELECT name FROM _migrations');
+    const appliedSet = new Set(applied.map((r: any) => r.name));
+
     console.log('Running migrations...');
-    for (const file of files) {
-      if (file.endsWith('.sql')) {
+    for (const file of migrationFiles) {
+      if (appliedSet.has(file)) continue;
+      try {
         const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
         await client.query(sql);
+        await client.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+        console.log(`  Applied: ${file}`);
+      } catch (err: any) {
+        console.error(`  Migration ${file} failed:`, err.message);
       }
     }
     console.log('Migrations completed!');

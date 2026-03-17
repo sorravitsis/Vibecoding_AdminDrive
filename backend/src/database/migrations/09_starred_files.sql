@@ -1,4 +1,4 @@
-CREATE TABLE starred_files (
+CREATE TABLE IF NOT EXISTS starred_files (
   star_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
   file_id UUID REFERENCES files ON DELETE CASCADE,
@@ -10,4 +10,4 @@ CREATE TABLE starred_files (
   CONSTRAINT unique_star_file UNIQUE (user_id, file_id),
   CONSTRAINT unique_star_folder UNIQUE (user_id, folder_id)
 );
-CREATE INDEX idx_starred_user ON starred_files(user_id, starred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_starred_user ON starred_files(user_id, starred_at DESC);

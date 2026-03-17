@@ -4,6 +4,7 @@ import pathModule from 'path';
 import fs from 'fs';
 import { logAction } from '../utils/auditLogger.js';
 import { getDriveService, TARGET_FOLDER_ID } from '../utils/googleDriveService.js';
+import { createNotification } from '../utils/notificationHelper.js';
 
 async function getGoogleFolderId(dbFolderId: string | null): Promise<string> {
   if (!dbFolderId) return TARGET_FOLDER_ID;
@@ -532,6 +533,16 @@ export const shareFile = async (req: any, res: Response) => {
     }
 
     await logAction(userId, 'share', 'file', fileId, { file_name: file.file_name, shared_with: email, access_level: accessLevel });
+
+    // Notify the target user
+    await createNotification(
+      targetUserId,
+      'share',
+      'File shared with you',
+      `"${file.file_name}" has been shared with you (${accessLevel || 'view'} access).`,
+      { file_id: fileId, file_name: file.file_name, access_level: accessLevel || 'view' }
+    );
+
     res.json({ message: `Shared with ${email}` });
   } catch (err: any) {
     console.error('Share error:', err);
@@ -605,6 +616,16 @@ export const shareFolder = async (req: any, res: Response) => {
     }
 
     await logAction(userId, 'share', 'folder', folderId, { folder_name: folder.name, shared_with: email, access_level: accessLevel, files_shared: allFolderIds.length });
+
+    // Notify the target user
+    await createNotification(
+      targetUserId,
+      'share',
+      'Folder shared with you',
+      `"${folder.name}" has been shared with you (${accessLevel || 'view'} access).`,
+      { folder_id: folderId, folder_name: folder.name, access_level: accessLevel || 'view' }
+    );
+
     res.json({ message: `Folder shared with ${email}` });
   } catch (err: any) {
     console.error('Share folder error:', err);
