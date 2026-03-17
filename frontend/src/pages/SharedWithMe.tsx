@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { File, Folder, Download, Users } from 'lucide-react';
+import { File, Folder, Download, Users, Loader } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '../context/ToastContext';
 import '../styles/files.css';
 import '../styles/shared.css';
 
@@ -16,6 +17,7 @@ interface SharedItem {
 }
 
 const SharedWithMe: React.FC = () => {
+  const { showToast } = useToast();
   const [items, setItems] = useState<SharedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,14 +26,30 @@ const SharedWithMe: React.FC = () => {
       try {
         const res = await api.get('/files/shared-with-me');
         setItems(res.data);
-      } catch (err) {
-        console.error('Failed to fetch shared files', err);
+      } catch {
+        showToast('Failed to load shared files', 'error');
       } finally {
         setLoading(false);
       }
     };
     fetchShared();
   }, []);
+
+  const handleDownload = async (item: SharedItem) => {
+    try {
+      const res = await api.get(`/files/${item.id}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      showToast('Failed to download file', 'error');
+    }
+  };
 
   return (
     <div className="page-content">
@@ -52,16 +70,16 @@ const SharedWithMe: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading...</span></div>
         ) : items.length === 0 ? (
-          <div className="empty-state">
-            <Users size={48} style={{ marginBottom: 12 }} />
+          <div className="empty-state-box">
+            <Users size={48} />
             <p>Nothing has been shared with you yet</p>
           </div>
         ) : (
-          items.map((item, idx) => (
+          items.map((item) => (
             <div
-              key={idx}
+              key={item.id}
               className="grid-row"
               style={{ gridTemplateColumns: '2fr 140px 90px 140px 50px' }}
             >
@@ -82,9 +100,14 @@ const SharedWithMe: React.FC = () => {
               </div>
               <div className="col-actions">
                 {item.type === 'file' && (
-                  <div className="action-menu" title="Download">
+                  <button
+                    className="action-btn edit"
+                    onClick={() => handleDownload(item)}
+                    title="Download"
+                    style={{ background: 'none', border: '1px solid var(--border)', cursor: 'pointer' }}
+                  >
                     <Download size={16} />
-                  </div>
+                  </button>
                 )}
               </div>
             </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { File, Folder, Star } from 'lucide-react';
+import { File, Folder, Star, Loader } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '../context/ToastContext';
 import '../styles/files.css';
 
 interface StarredItem {
@@ -13,7 +14,17 @@ interface StarredItem {
   starred_at: string;
 }
 
+const formatBytes = (bytes: string) => {
+  const b = parseInt(bytes);
+  if (!b || b === 0) return '--';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(b) / Math.log(k));
+  return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
 const StarredPage: React.FC = () => {
+  const { showToast } = useToast();
   const [items, setItems] = useState<StarredItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,8 +32,8 @@ const StarredPage: React.FC = () => {
     try {
       const res = await api.get('/files/starred');
       setItems(res.data);
-    } catch (err) {
-      console.error('Failed to fetch starred items', err);
+    } catch {
+      showToast('Failed to load starred items', 'error');
     } finally {
       setLoading(false);
     }
@@ -40,8 +51,9 @@ const StarredPage: React.FC = () => {
     try {
       await api.delete(url);
       setItems(prev => prev.filter(i => i.id !== item.id));
-    } catch (err) {
-      alert('Failed to unstar');
+      showToast('Removed from starred', 'success');
+    } catch {
+      showToast('Failed to unstar', 'error');
     }
   };
 
@@ -60,15 +72,16 @@ const StarredPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading...</span></div>
         ) : items.length === 0 ? (
-          <div className="empty-state">
-            <Star size={48} style={{ marginBottom: 12 }} />
+          <div className="empty-state-box">
+            <Star size={48} />
             <p>No starred items yet</p>
+            <span>Star files or folders to find them quickly</span>
           </div>
         ) : (
-          items.map((item, idx) => (
-            <div key={idx} className="grid-row">
+          items.map((item) => (
+            <div key={item.id} className="grid-row">
               <div className="col-name">
                 {item.type === 'folder'
                   ? <Folder className="icon-folder" size={20} />
@@ -76,9 +89,7 @@ const StarredPage: React.FC = () => {
                 <span>{item.name}</span>
               </div>
               <div className="col-size">
-                {item.file_size
-                  ? `${(parseInt(item.file_size) / 1024).toFixed(1)} KB`
-                  : '--'}
+                {item.file_size ? formatBytes(item.file_size) : '--'}
               </div>
               <div className="col-date">
                 {new Date(item.starred_at).toLocaleDateString()}

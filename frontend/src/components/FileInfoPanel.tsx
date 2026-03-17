@@ -20,6 +20,15 @@ interface FileInfoPanelProps {
   onClose: () => void;
 }
 
+const formatBytes = (bytes: string) => {
+  const b = parseInt(bytes);
+  if (!b || b === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(b) / Math.log(k));
+  return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
 const FileInfoPanel: React.FC<FileInfoPanelProps> = ({ fileId, onClose }) => {
   const [info, setInfo] = useState<FileInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +75,7 @@ const FileInfoPanel: React.FC<FileInfoPanelProps> = ({ fileId, onClose }) => {
               <div className="info-row">
                 <HardDrive size={14} />
                 <span className="info-label">Size</span>
-                <span>{(parseInt(info.file_size) / 1024).toFixed(1)} KB</span>
+                <span>{formatBytes(info.file_size)}</span>
               </div>
               <div className="info-row">
                 <File size={14} />

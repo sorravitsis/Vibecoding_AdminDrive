@@ -991,7 +991,7 @@ export const getFileInfo = async (req: any, res: Response) => {
     // Recent activity (last 5)
     const activityRes = await pool.query(
       `SELECT al.action, al.created_at, u.full_name AS actor_name
-       FROM audit_logs al JOIN users u ON al.user_id = u.user_id
+       FROM audit_logs al JOIN users u ON al.actor_id = u.user_id
        WHERE al.target_id = $1
        ORDER BY al.created_at DESC LIMIT 5`,
       [fileId]

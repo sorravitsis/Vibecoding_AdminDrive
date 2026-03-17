@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { logAction } from '../utils/auditLogger';
+import { validatePassword } from '../utils/passwordPolicy.js';
 
 const TOKEN_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 
@@ -115,8 +116,9 @@ export const register = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email, full name, and password are required' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const pwCheck = validatePassword(password);
+  if (!pwCheck.valid) {
+    return res.status(400).json({ error: pwCheck.error });
   }
 
   try {
@@ -172,8 +174,12 @@ export const changePassword = async (req: any, res: Response) => {
   const userId = req.user.userId;
   const { currentPassword, newPassword } = req.body;
 
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!newPassword) {
+    return res.status(400).json({ error: 'New password is required' });
+  }
+  const pwCheckChange = validatePassword(newPassword);
+  if (!pwCheckChange.valid) {
+    return res.status(400).json({ error: pwCheckChange.error });
   }
 
   try {
