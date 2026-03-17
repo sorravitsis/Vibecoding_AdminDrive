@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3, Eye,
   FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search, Loader, FolderOpen,
-  Star, Copy, FolderInput, Filter, ArrowUp, ArrowDown, CheckSquare, Square,
+  Star, Copy, FolderInput, Filter, ArrowUp, ArrowDown, CheckSquare, Square, Link, FolderDown,
 } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../context/ToastContext';
@@ -91,6 +91,11 @@ const Files: React.FC = () => {
     item: null,
   });
   const [infoPanelFileId, setInfoPanelFileId] = useState<string | null>(null);
+  // Phase 4: Share link
+  const [shareLinkModal, setShareLinkModal] = useState<{ fileId: string; name: string } | null>(null);
+  const [shareLinkForm, setShareLinkForm] = useState({ expiresIn: '', password: '', maxDownloads: '' });
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [shareLinkLoading, setShareLinkLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -447,6 +452,49 @@ const Files: React.FC = () => {
     }
   };
 
+  const handleCreateShareLink = async () => {
+    if (!shareLinkModal) return;
+    setShareLinkLoading(true);
+    try {
+      const body: any = { fileId: shareLinkModal.fileId };
+      if (shareLinkForm.expiresIn) body.expiresIn = parseInt(shareLinkForm.expiresIn);
+      if (shareLinkForm.password) body.password = shareLinkForm.password;
+      if (shareLinkForm.maxDownloads) body.maxDownloads = parseInt(shareLinkForm.maxDownloads);
+      const res = await api.post('/share-links', body);
+      const baseUrl = window.location.origin;
+      setGeneratedLink(`${baseUrl}/share/${res.data.token}`);
+      showToast('Share link created!', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to create share link', 'error');
+    } finally {
+      setShareLinkLoading(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (generatedLink) {
+      navigator.clipboard.writeText(generatedLink);
+      showToast('Link copied to clipboard', 'success');
+    }
+  };
+
+  const handleDownloadFolder = async (folderId: string, folderName: string) => {
+    try {
+      showToast('Preparing ZIP download...', 'info');
+      const response = await api.get(`/files/folders/${folderId}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${folderName}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast('Download failed', 'error');
+    }
+  };
+
   const handleRowClick = (item: FileItem) => {
     if (bulkMode) {
       toggleSelect((item.file_id || item.folder_id)!);
@@ -715,9 +763,19 @@ const Files: React.FC = () => {
                               <Copy size={14} /> Make a copy
                             </button>
                           )}
+                          {item.type === 'folder' && (
+                            <button onClick={() => { handleDownloadFolder(item.folder_id!, item.name); setOpenMenu(null); }}>
+                              <FolderDown size={14} /> Download as ZIP
+                            </button>
+                          )}
                           <button onClick={() => { setShareModal({ id: itemId, name: item.name, type: item.type }); setOpenMenu(null); }}>
                             <Share2 size={14} /> Share
                           </button>
+                          {item.type === 'file' && (
+                            <button onClick={() => { setShareLinkModal({ fileId: item.file_id!, name: item.name }); setShareLinkForm({ expiresIn: '', password: '', maxDownloads: '' }); setGeneratedLink(null); setOpenMenu(null); }}>
+                              <Link size={14} /> Get link
+                            </button>
+                          )}
                           <button onClick={() => { handleRename(itemId, item.type, item.name); setOpenMenu(null); }}>
                             <Edit3 size={14} /> Rename
                           </button>
@@ -761,6 +819,57 @@ const Files: React.FC = () => {
           fileId={infoPanelFileId}
           onClose={() => setInfoPanelFileId(null)}
         />
+      )}
+
+      {/* Share Link Modal */}
+      {shareLinkModal && (
+        <div className="modal-overlay" onClick={() => setShareLinkModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create Share Link</h3>
+              <button className="modal-close" onClick={() => setShareLinkModal(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 16px' }}>
+                Create a shareable link for <strong>"{shareLinkModal.name}"</strong>
+              </p>
+              {!generatedLink ? (
+                <>
+                  <label>Expires after (hours, optional)</label>
+                  <input className="modal-input" type="number" placeholder="e.g. 24, 72"
+                    value={shareLinkForm.expiresIn}
+                    onChange={e => setShareLinkForm({ ...shareLinkForm, expiresIn: e.target.value })} />
+                  <label>Password protection (optional)</label>
+                  <input className="modal-input" type="password" placeholder="Leave empty for no password"
+                    value={shareLinkForm.password}
+                    onChange={e => setShareLinkForm({ ...shareLinkForm, password: e.target.value })} />
+                  <label>Max downloads (optional)</label>
+                  <input className="modal-input" type="number" placeholder="e.g. 10"
+                    value={shareLinkForm.maxDownloads}
+                    onChange={e => setShareLinkForm({ ...shareLinkForm, maxDownloads: e.target.value })} />
+                </>
+              ) : (
+                <div className="share-link-result">
+                  <label>Share Link</label>
+                  <div className="share-link-row">
+                    <input className="modal-input" readOnly value={generatedLink} />
+                    <button className="btn-primary btn-sm" onClick={handleCopyLink}>Copy</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShareLinkModal(null)}>
+                {generatedLink ? 'Close' : 'Cancel'}
+              </button>
+              {!generatedLink && (
+                <button className="btn-primary" onClick={handleCreateShareLink} disabled={shareLinkLoading}>
+                  {shareLinkLoading ? 'Creating...' : 'Create Link'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

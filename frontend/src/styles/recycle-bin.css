@@ -23,3 +23,46 @@
   background: rgba(34, 197, 94, 0.1);
   border-color: var(--success);
 }
+
+.recycle-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.perm-delete-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--danger, #ef4444);
+  padding: 6px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.perm-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger, #ef4444);
+}
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm, 8px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger, #ef4444);
+  font-size: 14px;
+}
+
+.btn-danger:hover {
+  background: var(--danger, #ef4444);
+  color: #fff;
+}

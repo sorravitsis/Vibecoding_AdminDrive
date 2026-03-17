@@ -683,3 +683,25 @@
     height: 90vh;
   }
 }
+
+/* ── Share Link ──────────────────────────────── */
+.share-link-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link-row .modal-input {
+  flex: 1;
+}
+
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}

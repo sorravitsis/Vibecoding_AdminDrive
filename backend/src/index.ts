@@ -32,7 +32,19 @@ import {
   unstarFolder,
   copyFile,
   getFileInfo,
+  downloadFolder,
+  restoreFolder,
+  permanentDeleteFile,
+  emptyRecycleBin,
+  globalSearch,
 } from './controllers/fileController.js';
+import {
+  createShareLink,
+  getShareLinks,
+  deleteShareLink,
+  accessShareLink,
+  downloadSharedFile,
+} from './controllers/shareLinkController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
@@ -97,6 +109,10 @@ app.post('/webhooks/drive', handleDriveWebhook);
 // Health check (no auth)
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+// Public share link routes (no auth required)
+app.get('/share/:token', accessShareLink);
+app.get('/share/:token/download', downloadSharedFile);
+
 // Protected routes
 app.use(authMiddleware);
 
@@ -113,11 +129,18 @@ app.put('/notifications/:notificationId/read', markAsRead);
 // Dashboard
 app.get('/dashboard/stats', getDashboardStats);
 
+// Share link routes (protected)
+app.post('/share-links', createShareLink);
+app.get('/share-links', getShareLinks);
+app.delete('/share-links/:linkId', deleteShareLink);
+
 // ── Static file routes MUST come before /:fileId param routes ─────────────────
 app.get('/files', listFiles);
+app.get('/files/search', globalSearch);
 app.get('/files/deleted', listDeletedFiles);
 app.get('/files/shared-with-me', getSharedWithMe);
 app.get('/files/starred', getStarredFiles);
+app.delete('/files/recycle-bin/empty', emptyRecycleBin);
 app.post('/files/upload', fileLimiter, upload.single('file'), uploadFile);
 app.post('/files/folders', fileLimiter, createFolder);
 
@@ -131,10 +154,13 @@ app.post('/files/:fileId/star', starFile);
 app.delete('/files/:fileId/star', unstarFile);
 app.post('/files/:fileId/copy', copyFile);
 app.put('/files/:fileId/move', moveFile);
+app.delete('/files/:fileId/permanent', permanentDeleteFile);
 app.delete('/files/:fileId', fileLimiter, deleteFile);
 app.post('/files/:fileId/restore', restoreFile);
 
 // ── Folder param routes ───────────────────────────────────────────────────────
+app.get('/files/folders/:folderId/download', downloadFolder);
+app.post('/files/folders/:folderId/restore', restoreFolder);
 app.post('/files/folders/:folderId/share', shareFolder);
 app.put('/files/folders/:folderId/rename', renameFolder);
 app.put('/files/folders/:folderId/move', moveFolder);

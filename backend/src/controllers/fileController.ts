@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../config/database.js';
 import pathModule from 'path';
 import fs from 'fs';
+import archiver from 'archiver';
 import { logAction } from '../utils/auditLogger.js';
 import { getDriveService, TARGET_FOLDER_ID } from '../utils/googleDriveService.js';
 import { createNotification } from '../utils/notificationHelper.js';
@@ -1007,6 +1008,404 @@ export const getFileInfo = async (req: any, res: Response) => {
       recent_activity: activityRes.rows,
     });
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Feature: Download Folder as ZIP ──────────────────────────────────────────
+
+export const downloadFolder = async (req: any, res: Response) => {
+  const { folderId } = req.params;
+  const { userId, role } = req.user;
+
+  try {
+    // Verify folder exists
+    const folderRes = await pool.query(
+      "SELECT folder_id, name, owner_id FROM folders WHERE folder_id = $1 AND status = 'active'",
+      [folderId]
+    );
+    if (folderRes.rows.length === 0) return res.status(404).json({ error: 'Folder not found' });
+
+    const folder = folderRes.rows[0];
+    if (role !== 'admin' && role !== 'manager' && folder.owner_id !== userId) {
+      const permRes = await pool.query(
+        "SELECT 1 FROM permissions WHERE folder_id = $1 AND user_id = $2",
+        [folderId, userId]
+      );
+      if (permRes.rows.length === 0) return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    // Recursively find all files with their folder paths
+    const filesRes = await pool.query(`
+      WITH RECURSIVE folder_tree AS (
+        SELECT folder_id, name, parent_id, name::text AS path
+        FROM folders WHERE folder_id = $1 AND status = 'active'
+        UNION ALL
+        SELECT f.folder_id, f.name, f.parent_id, (ft.path || '/' || f.name)::text
+        FROM folders f
+        JOIN folder_tree ft ON f.parent_id = ft.folder_id
+        WHERE f.status = 'active'
+      )
+      SELECT fi.google_file_id, fi.file_name, fi.mime_type, ft.path
+      FROM files fi
+      JOIN folder_tree ft ON fi.folder_id = ft.folder_id
+      WHERE fi.status = 'active'
+    `, [folderId]);
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folder.name)}.zip"`);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Cache-Control', 'private, no-cache');
+
+    archive.pipe(res);
+
+    archive.on('error', (err: any) => {
+      console.error('Archive error:', err);
+      res.status(500).end();
+    });
+
+    const drive = getDriveService();
+
+    for (const file of filesRes.rows) {
+      try {
+        const driveRes = await drive.files.get(
+          { fileId: file.google_file_id, alt: 'media', supportsAllDrives: true },
+          { responseType: 'stream' }
+        );
+        const filePath = `${file.path}/${file.file_name}`;
+        archive.append(driveRes.data as any, { name: filePath });
+      } catch (driveErr) {
+        console.error(`Failed to fetch file ${file.file_name} from Drive:`, driveErr);
+      }
+    }
+
+    await archive.finalize();
+    await logAction(userId, 'download_folder', 'folder', folderId, {
+      folder_name: folder.name,
+      file_count: filesRes.rows.length,
+    });
+  } catch (err: any) {
+    console.error('Download folder error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+};
+
+// ─── Feature: Restore Folder ──────────────────────────────────────────────────
+
+export const restoreFolder = async (req: any, res: Response) => {
+  const { folderId } = req.params;
+  const { userId, role } = req.user;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const folderRes = await client.query(
+      "SELECT folder_id, name, owner_id, google_folder_id FROM folders WHERE folder_id = $1 AND status = 'deleted'",
+      [folderId]
+    );
+    if (folderRes.rows.length === 0) throw new Error('Folder not found in recycle bin');
+
+    const folder = folderRes.rows[0];
+    if (role !== 'admin' && role !== 'manager' && folder.owner_id !== userId) {
+      throw new Error('Permission denied');
+    }
+
+    // Find all descendant folders recursively (deleted ones)
+    const descendantsRes = await client.query(`
+      WITH RECURSIVE folder_tree AS (
+        SELECT folder_id FROM folders WHERE folder_id = $1
+        UNION ALL
+        SELECT f.folder_id FROM folders f
+        JOIN folder_tree ft ON f.parent_id = ft.folder_id
+        WHERE f.status = 'deleted'
+      )
+      SELECT folder_id FROM folder_tree
+    `, [folderId]);
+
+    const allFolderIds = descendantsRes.rows.map((r: any) => r.folder_id);
+
+    // Restore all files in those folders and update used_bytes
+    const filesRes = await client.query(`
+      UPDATE files SET status = 'active', deleted_at = NULL, deleted_by = NULL
+      WHERE folder_id = ANY($1) AND status = 'deleted'
+      RETURNING file_size, uploader_id, file_id, file_name
+    `, [allFolderIds]);
+
+    for (const file of filesRes.rows) {
+      await client.query(
+        'UPDATE users SET used_bytes = used_bytes + $1, updated_at = NOW() WHERE user_id = $2',
+        [file.file_size, file.uploader_id]
+      );
+    }
+
+    // Restore all folders
+    await client.query(`
+      UPDATE folders SET status = 'active', deleted_at = NULL, deleted_by = NULL
+      WHERE folder_id = ANY($1) AND status = 'deleted'
+    `, [allFolderIds]);
+
+    // Un-trash on Google Drive
+    try {
+      const drive = getDriveService();
+      await drive.files.update({
+        fileId: folder.google_folder_id,
+        supportsAllDrives: true,
+        requestBody: { trashed: false },
+      });
+    } catch (driveErr) {
+      console.error('Google Drive untrash folder error (continuing):', driveErr);
+    }
+
+    await logAction(userId, 'restore', 'folder', folderId, {
+      folder_name: folder.name,
+      files_restored: filesRes.rows.length,
+      subfolders_restored: allFolderIds.length - 1,
+    });
+
+    await client.query('COMMIT');
+    res.json({ message: 'Folder and contents restored successfully' });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error('Restore folder error:', err);
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── Feature: Permanent Delete File ──────────────────────────────────────────
+
+export const permanentDeleteFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId, role } = req.user;
+
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can permanently delete files' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const fileRes = await client.query(
+      'SELECT file_id, file_name, file_size, uploader_id, google_file_id, status FROM files WHERE file_id = $1',
+      [fileId]
+    );
+    if (fileRes.rows.length === 0) throw new Error('File not found');
+
+    const file = fileRes.rows[0];
+
+    // Delete from Google Drive permanently
+    try {
+      const drive = getDriveService();
+      await drive.files.delete({ fileId: file.google_file_id, supportsAllDrives: true });
+    } catch (driveErr) {
+      console.error('Google Drive permanent delete error (continuing):', driveErr);
+    }
+
+    // If file was still active, update used_bytes
+    if (file.status === 'active') {
+      await client.query(
+        'UPDATE users SET used_bytes = GREATEST(0, used_bytes - $1), updated_at = NOW() WHERE user_id = $2',
+        [file.file_size, file.uploader_id]
+      );
+    }
+
+    // Delete from database
+    await client.query('DELETE FROM files WHERE file_id = $1', [fileId]);
+    await logAction(userId, 'permanent_delete', 'file', fileId, { file_name: file.file_name });
+
+    await client.query('COMMIT');
+    res.json({ message: 'File permanently deleted' });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error('Permanent delete error:', err);
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── Feature: Empty Recycle Bin ───────────────────────────────────────────────
+
+export const emptyRecycleBin = async (req: any, res: Response) => {
+  const { userId, role } = req.user;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Get all deleted files for the user (admin: all users)
+    let filesQuery: string;
+    let filesParams: any[];
+
+    if (role === 'admin') {
+      filesQuery = "SELECT file_id, file_name, google_file_id FROM files WHERE status = 'deleted'";
+      filesParams = [];
+    } else {
+      filesQuery = "SELECT file_id, file_name, google_file_id FROM files WHERE status = 'deleted' AND uploader_id = $1";
+      filesParams = [userId];
+    }
+
+    const filesRes = await client.query(filesQuery, filesParams);
+    const drive = getDriveService();
+
+    // Delete each file from Google Drive
+    for (const file of filesRes.rows) {
+      try {
+        await drive.files.delete({ fileId: file.google_file_id, supportsAllDrives: true });
+      } catch (driveErr) {
+        console.error(`Drive delete error for ${file.file_name} (continuing):`, driveErr);
+      }
+    }
+
+    // Delete files from database
+    if (role === 'admin') {
+      await client.query("DELETE FROM files WHERE status = 'deleted'");
+    } else {
+      await client.query("DELETE FROM files WHERE status = 'deleted' AND uploader_id = $1", [userId]);
+    }
+
+    // Delete deleted folders from database
+    if (role === 'admin') {
+      await client.query("DELETE FROM folders WHERE status = 'deleted'");
+    } else {
+      await client.query("DELETE FROM folders WHERE status = 'deleted' AND owner_id = $1", [userId]);
+    }
+
+    await logAction(userId, 'empty_recycle_bin', 'file', userId, {
+      files_deleted: filesRes.rows.length,
+    });
+
+    await client.query('COMMIT');
+    res.json({ message: 'Recycle bin emptied', files_deleted: filesRes.rows.length });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error('Empty recycle bin error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── Feature: Global Search ──────────────────────────────────────────────────
+
+export const globalSearch = async (req: any, res: Response) => {
+  const { q } = req.query;
+  const { userId, role } = req.user;
+
+  if (!q || String(q).trim().length === 0) {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  const searchTerm = `%${String(q).trim()}%`;
+
+  try {
+    let filesQuery: string;
+    let filesParams: any[];
+
+    if (role === 'admin' || role === 'manager') {
+      filesQuery = `
+        SELECT f.file_id AS id, f.file_name AS name, f.file_size, f.mime_type,
+               f.created_at, 'file' AS type, f.folder_id,
+               COALESCE(fp.folder_path, '') AS folder_path
+        FROM files f
+        LEFT JOIN LATERAL (
+          WITH RECURSIVE ancestors AS (
+            SELECT folder_id, name, parent_id FROM folders WHERE folder_id = f.folder_id
+            UNION ALL
+            SELECT fo.folder_id, fo.name, fo.parent_id
+            FROM folders fo JOIN ancestors a ON fo.folder_id = a.parent_id
+          )
+          SELECT string_agg(name, ' / ' ORDER BY (SELECT NULL)) AS folder_path FROM ancestors
+        ) fp ON true
+        WHERE f.status = 'active' AND f.file_name ILIKE $1
+        LIMIT 50
+      `;
+      filesParams = [searchTerm];
+    } else {
+      filesQuery = `
+        SELECT DISTINCT f.file_id AS id, f.file_name AS name, f.file_size, f.mime_type,
+               f.created_at, 'file' AS type, f.folder_id,
+               COALESCE(fp.folder_path, '') AS folder_path
+        FROM files f
+        LEFT JOIN permissions p ON p.file_id = f.file_id
+        LEFT JOIN LATERAL (
+          WITH RECURSIVE ancestors AS (
+            SELECT folder_id, name, parent_id FROM folders WHERE folder_id = f.folder_id
+            UNION ALL
+            SELECT fo.folder_id, fo.name, fo.parent_id
+            FROM folders fo JOIN ancestors a ON fo.folder_id = a.parent_id
+          )
+          SELECT string_agg(name, ' / ' ORDER BY (SELECT NULL)) AS folder_path FROM ancestors
+        ) fp ON true
+        WHERE f.status = 'active' AND f.file_name ILIKE $1
+          AND (f.uploader_id = $2 OR (p.user_id = $2 AND p.access_level IN ('view', 'edit'))
+               OR EXISTS (SELECT 1 FROM permissions fp2 WHERE fp2.folder_id = f.folder_id AND fp2.user_id = $2))
+        LIMIT 50
+      `;
+      filesParams = [searchTerm, userId];
+    }
+
+    // Search folders too
+    let foldersQuery: string;
+    let foldersParams: any[];
+
+    if (role === 'admin' || role === 'manager') {
+      foldersQuery = `
+        SELECT fo.folder_id AS id, fo.name, NULL::bigint AS file_size, NULL AS mime_type,
+               fo.created_at, 'folder' AS type, fo.parent_id AS folder_id,
+               COALESCE(fp.folder_path, '') AS folder_path
+        FROM folders fo
+        LEFT JOIN LATERAL (
+          WITH RECURSIVE ancestors AS (
+            SELECT folder_id, name, parent_id FROM folders WHERE folder_id = fo.parent_id
+            UNION ALL
+            SELECT f2.folder_id, f2.name, f2.parent_id
+            FROM folders f2 JOIN ancestors a ON f2.folder_id = a.parent_id
+          )
+          SELECT string_agg(name, ' / ' ORDER BY (SELECT NULL)) AS folder_path FROM ancestors
+        ) fp ON true
+        WHERE fo.status = 'active' AND fo.name ILIKE $1
+        LIMIT 25
+      `;
+      foldersParams = [searchTerm];
+    } else {
+      foldersQuery = `
+        SELECT fo.folder_id AS id, fo.name, NULL::bigint AS file_size, NULL AS mime_type,
+               fo.created_at, 'folder' AS type, fo.parent_id AS folder_id,
+               COALESCE(fp.folder_path, '') AS folder_path
+        FROM folders fo
+        LEFT JOIN permissions p ON p.folder_id = fo.folder_id
+        LEFT JOIN LATERAL (
+          WITH RECURSIVE ancestors AS (
+            SELECT folder_id, name, parent_id FROM folders WHERE folder_id = fo.parent_id
+            UNION ALL
+            SELECT f2.folder_id, f2.name, f2.parent_id
+            FROM folders f2 JOIN ancestors a ON f2.folder_id = a.parent_id
+          )
+          SELECT string_agg(name, ' / ' ORDER BY (SELECT NULL)) AS folder_path FROM ancestors
+        ) fp ON true
+        WHERE fo.status = 'active' AND fo.name ILIKE $1
+          AND (fo.owner_id = $2 OR (p.user_id = $2))
+        LIMIT 25
+      `;
+      foldersParams = [searchTerm, userId];
+    }
+
+    const [filesResult, foldersResult] = await Promise.all([
+      pool.query(filesQuery, filesParams),
+      pool.query(foldersQuery, foldersParams),
+    ]);
+
+    const results = [...foldersResult.rows, ...filesResult.rows].slice(0, 50);
+    res.json(results);
+  } catch (err: any) {
+    console.error('Global search error:', err);
     res.status(500).json({ error: err.message });
   }
 };
