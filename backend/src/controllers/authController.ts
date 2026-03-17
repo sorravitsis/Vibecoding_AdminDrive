@@ -107,6 +107,41 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+export const register = async (req: Request, res: Response) => {
+  const { email, fullName, password } = req.body;
+
+  if (!email || !fullName || !password) {
+    return res.status(400).json({ error: 'Email, full name, and password are required' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const existing = await pool.query('SELECT user_id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      `INSERT INTO users (email, full_name, role, status, quota_bytes, used_bytes, password_hash)
+       VALUES ($1, $2, 'user', 'active', 5368709120, 0, $3)
+       RETURNING user_id, email, full_name, role`,
+      [email.toLowerCase().trim(), fullName.trim(), passwordHash]
+    );
+
+    const user = result.rows[0];
+    await logAction(user.user_id, 'register', 'user', user.user_id, { email: user.email });
+
+    res.status(201).json({ message: 'Account created successfully' });
+  } catch (err: any) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const logout = async (_req: Request, res: Response) => {
   const isProduction = process.env.NODE_ENV === 'production';
   res.clearCookie('token', {

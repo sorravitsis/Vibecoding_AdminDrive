@@ -48,7 +48,7 @@ import {
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
-import { login, loginValidation, logout, getProfile, changePassword } from './controllers/authController.js';
+import { login, loginValidation, logout, register, getProfile, changePassword } from './controllers/authController.js';
 import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenanceController.js';
 import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from './controllers/notificationController.js';
 import { getDashboardStats } from './controllers/dashboardController.js';
@@ -101,6 +101,7 @@ const PORT = process.env.PORT || 3000;
 
 // Auth routes
 app.post('/auth/login', authLimiter, loginValidation, login);
+app.post('/auth/register', authLimiter, register);
 app.post('/auth/logout', logout);
 
 // Webhook endpoint
