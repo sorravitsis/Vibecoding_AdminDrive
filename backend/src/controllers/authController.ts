@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { body, validationResult } from 'express-validator';
-import pool from '../config/database';
-import { logAction } from '../utils/auditLogger';
+import pool from '../config/database.js';
+import { logAction } from '../utils/auditLogger.js';
 import { validatePassword } from '../utils/passwordPolicy.js';
 
 const TOKEN_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
@@ -16,7 +16,7 @@ export const loginValidation = [
 export const login = async (req: Request, res: Response) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ error: 'Invalid email or password format' });
   }
 
   const JWT_SECRET = process.env.JWT_SECRET;
@@ -37,32 +37,15 @@ export const login = async (req: Request, res: Response) => {
     const user = rows[0];
 
     if (!user || !user.password_hash) {
-      // Log failed attempt — unknown email
-      await logAction(null, 'login_failed', 'user', 'unknown', {
-        email,
-        reason: 'invalid_email',
-        ip: req.ip,
-      });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     if (user.status === 'suspended') {
-      await logAction(user.user_id, 'login_failed', 'user', user.user_id, {
-        email,
-        reason: 'account_suspended',
-        ip: req.ip,
-      });
       return res.status(403).json({ error: 'Account is suspended' });
     }
 
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
-      // Log failed attempt — wrong password
-      await logAction(user.user_id, 'login_failed', 'user', user.user_id, {
-        email,
-        reason: 'invalid_password',
-        ip: req.ip,
-      });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
