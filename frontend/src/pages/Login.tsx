@@ -47,11 +47,19 @@ const Login: React.FC = () => {
     }
   };
 
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
     setSuccess('');
+
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address (e.g. you@example.com)');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       await api.post('/auth/register', { email, fullName, password });
