@@ -183,6 +183,35 @@ export const resetPassword = async (req: any, res: Response) => {
   }
 };
 
+export const deleteUser = async (req: any, res: Response) => {
+  const { role, userId: adminId } = req.user;
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+
+  if (userId === adminId) {
+    return res.status(400).json({ error: 'Cannot delete your own account' });
+  }
+
+  try {
+    // Only allow deleting suspended users
+    const { rows } = await pool.query('SELECT status, email, full_name FROM users WHERE user_id = $1', [userId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    if (rows[0].status !== 'suspended') {
+      return res.status(400).json({ error: 'User must be suspended before deletion' });
+    }
+
+    await pool.query('DELETE FROM users WHERE user_id = $1', [userId]);
+    await logAction(adminId, 'delete_user', 'user', userId, { email: rows[0].email, full_name: rows[0].full_name });
+    res.json({ message: 'User deleted permanently' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 export const getMyStorage = async (req: any, res: Response) => {
   const { userId } = req.user;
 

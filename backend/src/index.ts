@@ -46,7 +46,7 @@ import {
   downloadSharedFile,
 } from './controllers/shareLinkController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
-import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
+import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword, deleteUser } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
 import { login, loginValidation, logout, register, getProfile, changePassword } from './controllers/authController.js';
 import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenanceController.js';
@@ -181,6 +181,7 @@ app.post('/admin/users', createUser);
 app.put('/admin/users/:userId/suspend', suspendUser);
 app.put('/admin/users/:userId/activate', activateUser);
 app.put('/admin/users/:userId/reset-password', resetPassword);
+app.delete('/admin/users/:userId', deleteUser);
 app.put('/admin/users/:userId', updateUser);
 app.get('/admin/storage-stats', getStorageStats);
 

@@ -7,7 +7,8 @@ import {
   Edit3,
   Key,
   Loader,
-  Users
+  Users,
+  Trash2
 } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../context/ToastContext';
@@ -115,7 +116,7 @@ const UsersManagement: React.FC = () => {
     fetchUsers();
   }, []);
 
-  const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void, danger?: boolean} | null>(null);
 
   const handleToggleStatus = (userId: string, currentStatus: string) => {
     const action = currentStatus === 'suspended' ? 'activate' : 'suspend';
@@ -137,6 +138,22 @@ const UsersManagement: React.FC = () => {
     });
   };
 
+  const handleDeleteUser = (user: UserStats) => {
+    setConfirmAction({
+      message: `Permanently delete user "${user.full_name}" (${user.email})? This cannot be undone.`,
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/admin/users/${user.user_id}`);
+          showToast('User deleted permanently', 'success');
+          fetchUsers();
+        } catch (err: any) {
+          showToast(err.response?.data?.error || 'Failed to delete user', 'error');
+        }
+      },
+    });
+  };
+
   const formatBytes = (bytes: string) => {
     const b = parseInt(bytes);
     if (b === 0) return '0 Bytes';
@@ -153,7 +170,7 @@ const UsersManagement: React.FC = () => {
         <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Confirm</h3>
+              <h3>{confirmAction.danger ? 'Warning' : 'Confirm'}</h3>
               <button className="modal-close" onClick={() => setConfirmAction(null)}><X size={18} /></button>
             </div>
             <div className="modal-body">
@@ -161,7 +178,9 @@ const UsersManagement: React.FC = () => {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setConfirmAction(null)}>Cancel</button>
-              <button className="btn-primary" onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }}>Confirm</button>
+              <button className={confirmAction.danger ? 'btn-danger' : 'btn-primary'} onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }}>
+                {confirmAction.danger ? 'Delete' : 'Confirm'}
+              </button>
             </div>
           </div>
         </div>
@@ -343,6 +362,15 @@ const UsersManagement: React.FC = () => {
                       >
                         {user.status === 'suspended' ? <UserCheck size={16} /> : <UserX size={16} />}
                       </button>
+                      {user.status === 'suspended' && (
+                        <button
+                          className="action-btn delete"
+                          onClick={() => handleDeleteUser(user)}
+                          title="Delete User"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
