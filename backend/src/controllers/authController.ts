@@ -117,3 +117,51 @@ export const logout = async (_req: Request, res: Response) => {
   });
   res.json({ message: 'Logged out' });
 };
+
+export const getProfile = async (req: any, res: Response) => {
+  const userId = req.user.userId;
+  try {
+    const { rows } = await pool.query(
+      'SELECT user_id, email, full_name, role, used_bytes, quota_bytes, created_at FROM users WHERE user_id = $1',
+      [userId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const changePassword = async (req: any, res: Response) => {
+  const userId = req.user.userId;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT password_hash FROM users WHERE user_id = $1',
+      [userId]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // If password_hash exists, verify current password
+    if (user.password_hash) {
+      const valid = await bcrypt.compare(currentPassword || '', user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2',
+      [hash, userId]
+    );
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};

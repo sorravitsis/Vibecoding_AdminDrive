@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Upload, Trash2, RotateCcw, Download, Share2, Edit3, User, Clock, Shield, ChevronLeft, ChevronRight, Loader, Inbox
+  Upload, Trash2, RotateCcw, Download, Share2, Edit3, User, Clock, Shield, ChevronLeft, ChevronRight, Loader, Inbox,
+  Copy, FolderInput,
 } from 'lucide-react';
 import api from '../utils/api';
 import '../styles/activity.css';
@@ -47,6 +48,8 @@ const ActivityStream: React.FC = () => {
       case 'download': return <Download size={16} className="text-primary" />;
       case 'share': return <Share2 size={16} className="text-warning" />;
       case 'rename': return <Edit3 size={16} className="text-secondary" />;
+      case 'copy': return <Copy size={16} className="text-info" />;
+      case 'move': return <FolderInput size={16} className="text-secondary" />;
       case 'suspend': case 'activate': case 'create_user': case 'update_user': case 'reset_password':
         return <Shield size={16} className="text-primary" />;
       default: return <Clock size={16} />;
@@ -66,6 +69,7 @@ const ActivityStream: React.FC = () => {
       activate: 'activated', create_user: 'created user', update_user: 'updated user',
       reset_password: 'reset password for', login: 'logged in', login_failed: 'failed login',
       reconcile_quotas: 'reconciled quotas', cleanup_orphans: 'cleaned up orphans',
+      copy: 'copied', move: 'moved',
     };
     return map[action] || action;
   };

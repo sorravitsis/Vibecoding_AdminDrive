@@ -1,0 +1,138 @@
+.info-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 199;
+}
+
+.info-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 360px;
+  height: 100vh;
+  background: #1a1a1a;
+  border-left: 1px solid #333;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.25s ease;
+  overflow-y: auto;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+.info-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  background: #1a1a1a;
+}
+
+.info-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #eee;
+}
+
+.info-panel-close {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.info-panel-close:hover {
+  color: #eee;
+}
+
+.info-panel-loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+}
+
+.info-panel-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.info-section h4 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #555;
+  letter-spacing: 0.6px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #ccc;
+  border-bottom: 1px solid #222;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row svg {
+  color: #555;
+  flex-shrink: 0;
+}
+
+.info-label {
+  color: #666;
+  min-width: 52px;
+  font-size: 12px;
+}
+
+.info-empty {
+  color: #555;
+  font-size: 13px;
+  font-style: italic;
+  margin: 0;
+}
+
+.info-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: #aaa;
+  border-bottom: 1px solid #222;
+}
+
+.info-activity-row:last-child {
+  border-bottom: none;
+}
+
+.info-activity-row svg {
+  color: #555;
+  flex-shrink: 0;
+}
+
+.info-time {
+  margin-left: auto;
+  color: #555;
+  font-size: 11px;
+  white-space: nowrap;
+}

@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Folder, File, MoreVertical, Download, Trash2, Share2, Plus, ChevronRight, Upload, X, Edit3, Eye,
-  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search, Loader, FolderOpen
+  FileText, Image, Film, Music, FileSpreadsheet, FileCode, Archive, Search, Loader, FolderOpen,
+  Star, Copy, FolderInput, Filter, ArrowUp, ArrowDown, CheckSquare, Square,
 } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../context/ToastContext';
+import FolderPickerModal from '../components/FolderPickerModal';
+import FileInfoPanel from '../components/FileInfoPanel';
 import '../styles/files.css';
 
 interface FileItem {
@@ -18,6 +21,21 @@ interface FileItem {
   created_at: string;
   type: 'file' | 'folder';
 }
+
+type SortField = 'name' | 'size' | 'date';
+type SortDir = 'asc' | 'desc';
+
+const FILE_TYPE_FILTERS: Record<string, string[]> = {
+  All: [],
+  Folders: ['folder'],
+  Images: ['image/'],
+  Videos: ['video/'],
+  Audio: ['audio/'],
+  PDF: ['application/pdf'],
+  Documents: ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml', 'text/'],
+  Spreadsheets: ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml'],
+  Archives: ['application/zip', 'application/x-rar', 'application/gzip', 'application/x-7z'],
+};
 
 const getFileIcon = (mimeType?: string) => {
   if (!mimeType) return <File className="icon-file" size={20} />;
@@ -48,7 +66,9 @@ const formatSize = (size?: string) => {
 const Files: React.FC = () => {
   const { showToast } = useToast();
   const [items, setItems] = useState<FileItem[]>([]);
-  const [pathStack, setPathStack] = useState<{id: string | null, name: string}[]>([{id: null, name: 'My Drive'}]);
+  const [pathStack, setPathStack] = useState<{ id: string | null; name: string }[]>([
+    { id: null, name: 'My Drive' },
+  ]);
   const [loading, setLoading] = useState(true);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [shareModal, setShareModal] = useState<{id: string, name: string, type: 'file' | 'folder'} | null>(null);
@@ -64,8 +84,23 @@ const Files: React.FC = () => {
   const [confirmModal, setConfirmModal] = useState<{message: string, onConfirm: () => void} | null>(null);
   const [promptModal, setPromptModal] = useState<{title: string, defaultValue: string, onSubmit: (val: string) => void} | null>(null);
   const [promptValue, setPromptValue] = useState('');
+  // Phase 2: Starred, Move, Info panel
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [moveModal, setMoveModal] = useState<{ open: boolean; item: FileItem | null }>({
+    open: false,
+    item: null,
+  });
+  const [infoPanelFileId, setInfoPanelFileId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Phase 1: Filter, Sort, Bulk
+  const [filterType, setFilterType] = useState('All');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const currentFolder = pathStack[pathStack.length - 1];
 
@@ -75,8 +110,14 @@ const Files: React.FC = () => {
       const params = new URLSearchParams();
       if (folderId) params.set('folderId', folderId);
       if (search) params.set('search', search);
-      const response = await api.get(`/files?${params.toString()}`);
-      setItems(response.data);
+
+      const [filesRes, starredRes] = await Promise.all([
+        api.get(`/files?${params.toString()}`),
+        api.get('/files/starred').catch(() => ({ data: [] })),
+      ]);
+      setItems(filesRes.data);
+      const ids = new Set<string>(starredRes.data.map((i: any) => i.id as string));
+      setStarredIds(ids);
     } catch (err) {
       console.error('Failed to fetch files', err);
     } finally {
@@ -84,7 +125,12 @@ const Files: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchFiles(currentFolder.id, searchTerm); }, [currentFolder.id, fetchFiles]);
+  useEffect(() => {
+    fetchFiles(currentFolder.id, searchTerm);
+    // Reset bulk mode on folder change
+    setBulkMode(false);
+    setSelectedIds(new Set());
+  }, [currentFolder.id, fetchFiles]);
 
   useEffect(() => {
     const handleClick = () => setOpenMenu(null);
@@ -105,6 +151,145 @@ const Files: React.FC = () => {
       .catch(() => { if (!cancelled) setPreviewUrl(null); });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [previewModal]);
+
+  // Filtered + sorted items
+  const displayItems = useMemo(() => {
+    let filtered = items;
+
+    // Apply filter
+    if (filterType !== 'All') {
+      const mimePatterns = FILE_TYPE_FILTERS[filterType];
+      if (mimePatterns[0] === 'folder') {
+        filtered = filtered.filter(i => i.type === 'folder');
+      } else {
+        filtered = filtered.filter(
+          i => i.type === 'file' && mimePatterns.some(p => (i.mime_type || '').startsWith(p))
+        );
+      }
+    }
+
+    // Sort: folders first, then by field
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      let cmp = 0;
+      if (sortField === 'name') {
+        cmp = a.name.localeCompare(b.name);
+      } else if (sortField === 'size') {
+        cmp = (parseInt(a.file_size || '0') || 0) - (parseInt(b.file_size || '0') || 0);
+      } else {
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return sorted;
+  }, [items, filterType, sortField, sortDir]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+  };
+
+  // Bulk selection
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === displayItems.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayItems.map(i => (i.file_id || i.folder_id)!)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setConfirmModal({
+      message: `Move ${selectedIds.size} item(s) to recycle bin?`,
+      onConfirm: async () => {
+        try {
+          const ops = displayItems
+            .filter(i => selectedIds.has((i.file_id || i.folder_id)!))
+            .map(i => {
+              const id = (i.file_id || i.folder_id)!;
+              const url = i.type === 'file' ? `/files/${id}` : `/files/folders/${id}`;
+              return api.delete(url);
+            });
+          await Promise.all(ops);
+          setSelectedIds(new Set());
+          setBulkMode(false);
+          showToast(`${selectedIds.size} item(s) deleted`, 'success');
+          fetchFiles(currentFolder.id, searchTerm);
+        } catch {
+          showToast('Some items failed to delete', 'error');
+        }
+      }
+    });
+  };
+
+  const handleToggleStar = async (e: React.MouseEvent, item: FileItem) => {
+    e.stopPropagation();
+    const id = (item.file_id || item.folder_id)!;
+    const isStarred = starredIds.has(id);
+    const url =
+      item.type === 'file' ? `/files/${id}/star` : `/files/folders/${id}/star`;
+    try {
+      if (isStarred) {
+        await api.delete(url);
+        setStarredIds(prev => {
+          const s = new Set(prev);
+          s.delete(id);
+          return s;
+        });
+      } else {
+        await api.post(url);
+        setStarredIds(prev => new Set([...prev, id]));
+      }
+    } catch (err) {
+      console.error('Failed to toggle star', err);
+    }
+  };
+
+  const handleMove = async (destFolderId: string | null) => {
+    const item = moveModal.item;
+    if (!item) return;
+    const id = (item.file_id || item.folder_id)!;
+    const url =
+      item.type === 'file' ? `/files/${id}/move` : `/files/folders/${id}/move`;
+    try {
+      await api.put(url, { destFolderId });
+      setMoveModal({ open: false, item: null });
+      showToast('Moved successfully', 'success');
+      fetchFiles(currentFolder.id, searchTerm);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Move failed', 'error');
+    }
+  };
+
+  const handleCopy = async (e: React.MouseEvent, item: FileItem) => {
+    e.stopPropagation();
+    try {
+      await api.post(`/files/${item.file_id}/copy`);
+      showToast('Copy created', 'success');
+      fetchFiles(currentFolder.id, searchTerm);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Copy failed', 'error');
+    }
+  };
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
@@ -262,6 +447,18 @@ const Files: React.FC = () => {
     }
   };
 
+  const handleRowClick = (item: FileItem) => {
+    if (bulkMode) {
+      toggleSelect((item.file_id || item.folder_id)!);
+      return;
+    }
+    if (item.type === 'file') {
+      setInfoPanelFileId(prev =>
+        prev === item.file_id ? null : item.file_id!
+      );
+    }
+  };
+
   const enterFolder = (id: string, name: string) => { setSearchTerm(''); setPathStack([...pathStack, { id, name }]); };
   const navigateTo = (index: number) => { if (index < pathStack.length - 1) { setSearchTerm(''); setPathStack(pathStack.slice(0, index + 1)); } };
   const toggleMenu = (e: React.MouseEvent, id: string) => { e.stopPropagation(); setOpenMenu(openMenu === id ? null : id); };
@@ -393,6 +590,40 @@ const Files: React.FC = () => {
             <input type="text" placeholder="Search files..." value={searchTerm}
               onChange={(e) => handleSearch(e.target.value)} />
           </div>
+
+          {/* Filter dropdown */}
+          <div className="filter-wrapper">
+            <Filter size={16} />
+            <select
+              className="filter-select"
+              value={filterType}
+              onChange={e => setFilterType(e.target.value)}
+            >
+              {Object.keys(FILE_TYPE_FILTERS).map(key => (
+                <option key={key} value={key}>{key}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Bulk select toggle */}
+          <button
+            className={`btn-secondary${bulkMode ? ' active' : ''}`}
+            onClick={() => {
+              setBulkMode(!bulkMode);
+              setSelectedIds(new Set());
+            }}
+          >
+            <CheckSquare size={18} />
+            <span>{bulkMode ? 'Cancel' : 'Select'}</span>
+          </button>
+
+          {bulkMode && selectedIds.size > 0 && (
+            <button className="btn-danger" onClick={handleBulkDelete}>
+              <Trash2 size={18} />
+              <span>Delete ({selectedIds.size})</span>
+            </button>
+          )}
+
           <button className="btn-primary" onClick={handleCreateFolder}><Plus size={18} /><span>New Folder</span></button>
           <button className="btn-secondary" onClick={handleUploadClick}><Upload size={18} /><span>Upload</span></button>
         </div>
@@ -402,67 +633,135 @@ const Files: React.FC = () => {
 
       <div className="files-grid">
         <div className="grid-header">
-          <div className="col-name">Name</div>
-          <div className="col-size">Size</div>
-          <div className="col-date">Created</div>
+          <div className="col-name col-sortable" onClick={() => handleSort('name')}>
+            {bulkMode && (
+              <button className="bulk-checkbox" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
+                {selectedIds.size === displayItems.length && displayItems.length > 0
+                  ? <CheckSquare size={16} />
+                  : <Square size={16} />}
+              </button>
+            )}
+            Name <SortIcon field="name" />
+          </div>
+          <div className="col-size col-sortable" onClick={() => handleSort('size')}>
+            Size <SortIcon field="size" />
+          </div>
+          <div className="col-date col-sortable" onClick={() => handleSort('date')}>
+            Created <SortIcon field="date" />
+          </div>
           <div className="col-actions"></div>
         </div>
 
         {loading ? (
           <div className="loading-spinner"><Loader size={24} className="spin" /><span>Loading files...</span></div>
-        ) : items.length === 0 ? (
+        ) : displayItems.length === 0 ? (
           <div className="empty-state-box">
             <FolderOpen size={48} />
             <p>{searchTerm ? 'No files match your search' : 'No files or folders here'}</p>
             <span>Upload files or create a folder to get started</span>
           </div>
         ) : (
-          items.map((item) => {
+          displayItems.map((item) => {
             const itemId = (item.file_id || item.folder_id)!;
+            const isStarred = starredIds.has(itemId);
+            const isInfoActive = infoPanelFileId === item.file_id;
+            const isSelected = selectedIds.has(itemId);
             return (
-              <div key={itemId} className="grid-row"
+              <div key={itemId}
+                className={`grid-row${isInfoActive ? ' info-active' : ''}${isSelected ? ' selected' : ''}`}
+                onClick={() => handleRowClick(item)}
                 onDoubleClick={() => {
+                  if (bulkMode) return;
                   if (item.type === 'folder') enterFolder(item.folder_id!, item.name);
                   else if (isPreviewable(item.mime_type)) handlePreview(item.file_id!, item.name, item.mime_type!);
                 }}>
                 <div className="col-name">
+                  {bulkMode && (
+                    <button className="bulk-checkbox" onClick={e => { e.stopPropagation(); toggleSelect(itemId); }}>
+                      {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                    </button>
+                  )}
                   {item.type === 'folder' ? <Folder className="icon-folder" size={20} /> : getFileIcon(item.mime_type)}
                   <span>{item.name}</span>
                   {item.mime_type === 'application/pdf' && <span className="file-badge pdf">PDF</span>}
+                  {!bulkMode && (
+                    <button
+                      className={`star-btn${isStarred ? ' starred' : ''}`}
+                      onClick={e => handleToggleStar(e, item)}
+                      title={isStarred ? 'Unstar' : 'Star'}
+                    >
+                      <Star size={14} />
+                    </button>
+                  )}
                 </div>
                 <div className="col-size">{formatSize(item.file_size)}</div>
                 <div className="col-date">{new Date(item.created_at).toLocaleDateString()}</div>
                 <div className="col-actions">
-                  <div className="action-menu">
-                    <button className="menu-trigger" onClick={(e) => toggleMenu(e, itemId)}><MoreVertical size={18} /></button>
-                    {openMenu === itemId && (
-                      <div className="dropdown show">
-                        {item.type === 'file' && isPreviewable(item.mime_type) && (
-                          <button onClick={() => { handlePreview(item.file_id!, item.name, item.mime_type!); setOpenMenu(null); }}>
-                            <Eye size={14} /> Preview
+                  {!bulkMode && (
+                    <div className="action-menu">
+                      <button className="menu-trigger" onClick={(e) => toggleMenu(e, itemId)}><MoreVertical size={18} /></button>
+                      {openMenu === itemId && (
+                        <div className="dropdown show">
+                          {item.type === 'file' && isPreviewable(item.mime_type) && (
+                            <button onClick={() => { handlePreview(item.file_id!, item.name, item.mime_type!); setOpenMenu(null); }}>
+                              <Eye size={14} /> Preview
+                            </button>
+                          )}
+                          {item.type === 'file' && (
+                            <button onClick={() => handleDownload(item.file_id!, item.name)}><Download size={14} /> Download</button>
+                          )}
+                          {item.type === 'file' && (
+                            <button onClick={e => handleCopy(e, item)}>
+                              <Copy size={14} /> Make a copy
+                            </button>
+                          )}
+                          <button onClick={() => { setShareModal({ id: itemId, name: item.name, type: item.type }); setOpenMenu(null); }}>
+                            <Share2 size={14} /> Share
                           </button>
-                        )}
-                        {item.type === 'file' && (
-                          <button onClick={() => handleDownload(item.file_id!, item.name)}><Download size={14} /> Download</button>
-                        )}
-                        <button onClick={() => { setShareModal({ id: itemId, name: item.name, type: item.type }); setOpenMenu(null); }}>
-                          <Share2 size={14} /> Share
-                        </button>
-                        <button onClick={() => { handleRename(itemId, item.type, item.name); setOpenMenu(null); }}>
-                          <Edit3 size={14} /> Rename
-                        </button>
-                        <button className="delete" onClick={() => handleDelete(itemId, item.type)}>
-                          <Trash2 size={14} /> Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                          <button onClick={() => { handleRename(itemId, item.type, item.name); setOpenMenu(null); }}>
+                            <Edit3 size={14} /> Rename
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setMoveModal({ open: true, item });
+                              setOpenMenu(null);
+                            }}
+                          >
+                            <FolderInput size={14} /> Move to...
+                          </button>
+                          <button className="delete" onClick={() => handleDelete(itemId, item.type)}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      {moveModal.open && moveModal.item && (
+        <FolderPickerModal
+          excludeFolderId={
+            moveModal.item.type === 'folder'
+              ? moveModal.item.folder_id
+              : undefined
+          }
+          onSelect={destFolderId => handleMove(destFolderId)}
+          onClose={() => setMoveModal({ open: false, item: null })}
+        />
+      )}
+
+      {infoPanelFileId && (
+        <FileInfoPanel
+          fileId={infoPanelFileId}
+          onClose={() => setInfoPanelFileId(null)}
+        />
+      )}
     </div>
   );
 };

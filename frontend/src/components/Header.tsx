@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
+import { useTheme } from '../context/ThemeContext';
 import api from '../utils/api';
 import '../styles/header.css';
 
 const Header: React.FC = () => {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [stats, setStats] = useState({ used: 0, total: 5 * 1024 * 1024 * 1024 });
 
   useEffect(() => {
@@ -34,6 +36,9 @@ const Header: React.FC = () => {
         <h1 className="page-title">SiS Warehouse</h1>
       </div>
       <div className="header-right">
+        <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
         <div className="quota-container">
           <div className="quota-info">
             <span>{usedGB} GB / {totalGB} GB</span>

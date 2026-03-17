@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Files, Trash2, History, Users, LogOut, Warehouse, Wrench, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Files, Trash2, History, Users, LogOut, Share2, Star, UserCircle, Warehouse, Wrench, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import '../styles/sidebar.css';
 
@@ -11,8 +11,11 @@ const Sidebar = () => {
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'manager', 'user'] },
     { name: 'Files', path: '/files', icon: Files, roles: ['admin', 'manager', 'user'] },
+    { name: 'Shared With Me', path: '/shared', icon: Share2, roles: ['admin', 'manager', 'user'] },
+    { name: 'Starred', path: '/starred', icon: Star, roles: ['admin', 'manager', 'user'] },
     { name: 'Recycle Bin', path: '/recycle-bin', icon: Trash2, roles: ['admin', 'manager', 'user'] },
     { name: 'Activity Stream', path: '/activity', icon: History, roles: ['admin', 'manager', 'user'] },
+    { name: 'Profile', path: '/profile', icon: UserCircle, roles: ['admin', 'manager', 'user'] },
     { name: 'Users Management', path: '/admin/users', icon: Users, roles: ['admin'] },
     { name: 'Maintenance', path: '/admin/maintenance', icon: Wrench, roles: ['admin'] },
   ];

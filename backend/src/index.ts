@@ -21,12 +21,22 @@ import {
   shareFile,
   shareFolder,
   renameFile,
-  renameFolder
+  renameFolder,
+  getSharedWithMe,
+  moveFile,
+  moveFolder,
+  getStarredFiles,
+  starFile,
+  unstarFile,
+  starFolder,
+  unstarFolder,
+  copyFile,
+  getFileInfo,
 } from './controllers/fileController.js';
 import { getActivityStream, getUserActivity } from './controllers/auditController.js';
 import { suspendUser, activateUser, getStorageStats, getMyStorage, createUser, updateUser, resetPassword } from './controllers/userController.js';
 import { handleDriveWebhook } from './controllers/webhookController.js';
-import { login, loginValidation, logout } from './controllers/authController.js';
+import { login, loginValidation, logout, getProfile, changePassword } from './controllers/authController.js';
 import { reconcileQuotas, cleanupOrphanedFiles } from './controllers/maintenanceController.js';
 
 dotenv.config();
@@ -88,20 +98,38 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // Protected routes
 app.use(authMiddleware);
 
-// File routes (upload/delete have rate limiting)
+// Auth profile routes
+app.get('/auth/profile', getProfile);
+app.put('/auth/password', changePassword);
+
+// ── Static file routes MUST come before /:fileId param routes ─────────────────
 app.get('/files', listFiles);
 app.get('/files/deleted', listDeletedFiles);
+app.get('/files/shared-with-me', getSharedWithMe);
+app.get('/files/starred', getStarredFiles);
 app.post('/files/upload', fileLimiter, upload.single('file'), uploadFile);
 app.post('/files/folders', fileLimiter, createFolder);
+
+// ── File param routes ─────────────────────────────────────────────────────────
 app.get('/files/:fileId/download', downloadFile);
 app.get('/files/:fileId/preview', previewFile);
+app.get('/files/:fileId/info', getFileInfo);
 app.post('/files/:fileId/share', shareFile);
 app.put('/files/:fileId/rename', renameFile);
-app.post('/files/folders/:folderId/share', shareFolder);
-app.put('/files/folders/:folderId/rename', renameFolder);
-app.delete('/files/folders/:folderId', fileLimiter, deleteFolder);
+app.post('/files/:fileId/star', starFile);
+app.delete('/files/:fileId/star', unstarFile);
+app.post('/files/:fileId/copy', copyFile);
+app.put('/files/:fileId/move', moveFile);
 app.delete('/files/:fileId', fileLimiter, deleteFile);
 app.post('/files/:fileId/restore', restoreFile);
+
+// ── Folder param routes ───────────────────────────────────────────────────────
+app.post('/files/folders/:folderId/share', shareFolder);
+app.put('/files/folders/:folderId/rename', renameFolder);
+app.put('/files/folders/:folderId/move', moveFolder);
+app.post('/files/folders/:folderId/star', starFolder);
+app.delete('/files/folders/:folderId/star', unstarFolder);
+app.delete('/files/folders/:folderId', fileLimiter, deleteFolder);
 
 // Audit routes
 app.get('/activity', getActivityStream);

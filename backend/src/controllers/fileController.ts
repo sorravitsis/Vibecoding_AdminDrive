@@ -116,10 +116,6 @@ export const listFiles = async (req: any, res: Response) => {
   try {
     const fId = (folderId === '' || folderId === 'null' || !folderId) ? null : folderId;
 
-    // Search filter
-    const searchFilter = search ? `AND name ILIKE $` : '';
-    const searchFilterFile = search ? `AND f.file_name ILIKE $` : '';
-
     let folderParams: any[] = [fId];
     let fileParams: any[] = [fId];
 
@@ -613,5 +609,383 @@ export const shareFolder = async (req: any, res: Response) => {
   } catch (err: any) {
     console.error('Share folder error:', err);
     res.status(400).json({ error: err.message });
+  }
+};
+
+// ─── Feature 1: Shared With Me ───────────────────────────────────────────────
+
+export const getSharedWithMe = async (req: any, res: Response) => {
+  const { userId } = req.user;
+  try {
+    const { rows } = await pool.query(
+      `SELECT f.file_id AS id, f.file_name AS name, f.file_size, f.mime_type, f.created_at,
+              'file' AS type, p.access_level, u.full_name AS shared_by_name
+       FROM permissions p
+       JOIN files f ON p.file_id = f.file_id
+       JOIN users u ON f.uploader_id = u.user_id
+       WHERE p.user_id = $1 AND f.uploader_id != $1 AND f.status = 'active'
+       UNION
+       SELECT fo.folder_id AS id, fo.name, NULL AS file_size, NULL AS mime_type, fo.created_at,
+              'folder' AS type, p.access_level, u.full_name AS shared_by_name
+       FROM permissions p
+       JOIN folders fo ON p.folder_id = fo.folder_id
+       JOIN users u ON fo.owner_id = u.user_id
+       WHERE p.user_id = $1 AND fo.owner_id != $1 AND fo.status = 'active'
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── Feature 2: Move Files/Folders ───────────────────────────────────────────
+
+export const moveFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { destFolderId } = req.body;
+  const { userId, role } = req.user;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const fileRes = await client.query(
+      `SELECT f.google_file_id, f.uploader_id, f.file_name, f.folder_id,
+              fl.google_folder_id AS old_google_parent
+       FROM files f
+       LEFT JOIN folders fl ON f.folder_id = fl.folder_id
+       WHERE f.file_id = $1 AND f.status = 'active'`,
+      [fileId]
+    );
+    if (fileRes.rows.length === 0) throw new Error('File not found');
+    const file = fileRes.rows[0];
+
+    const hasPermission = role === 'admin' || role === 'manager' || file.uploader_id === userId;
+    if (!hasPermission) {
+      const permRes = await client.query(
+        "SELECT 1 FROM permissions WHERE file_id = $1 AND user_id = $2 AND access_level = 'edit'",
+        [fileId, userId]
+      );
+      if (permRes.rows.length === 0) throw new Error('Permission denied');
+    }
+
+    const destId = destFolderId || null;
+    let newGoogleParent = TARGET_FOLDER_ID;
+    if (destId) {
+      const destRes = await client.query('SELECT google_folder_id FROM folders WHERE folder_id = $1', [destId]);
+      if (destRes.rows.length === 0) throw new Error('Destination folder not found');
+      newGoogleParent = destRes.rows[0].google_folder_id;
+    }
+
+    const drive = getDriveService();
+    await drive.files.update({
+      fileId: file.google_file_id,
+      addParents: newGoogleParent,
+      removeParents: file.old_google_parent || TARGET_FOLDER_ID,
+      requestBody: {},
+    });
+
+    await client.query('UPDATE files SET folder_id = $1 WHERE file_id = $2', [destId, fileId]);
+    await logAction(userId, 'move', 'file', fileId, { file_name: file.file_name });
+    await client.query('COMMIT');
+    res.json({ message: 'File moved successfully' });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+export const moveFolder = async (req: any, res: Response) => {
+  const { folderId } = req.params;
+  const { destFolderId } = req.body;
+  const { userId, role } = req.user;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const folderRes = await client.query(
+      `SELECT fo.google_folder_id, fo.owner_id, fo.name, fo.parent_id,
+              pf.google_folder_id AS old_google_parent
+       FROM folders fo
+       LEFT JOIN folders pf ON fo.parent_id = pf.folder_id
+       WHERE fo.folder_id = $1 AND fo.status = 'active'`,
+      [folderId]
+    );
+    if (folderRes.rows.length === 0) throw new Error('Folder not found');
+    const folder = folderRes.rows[0];
+
+    if (role !== 'admin' && role !== 'manager' && folder.owner_id !== userId) {
+      throw new Error('Permission denied');
+    }
+
+    if (destFolderId) {
+      // Cycle check: destFolderId must not be a descendant of folderId
+      const cycleRes = await client.query(
+        `WITH RECURSIVE descendants AS (
+           SELECT folder_id FROM folders WHERE folder_id = $1
+           UNION ALL
+           SELECT f.folder_id FROM folders f JOIN descendants d ON f.parent_id = d.folder_id
+         )
+         SELECT COUNT(*) FROM descendants WHERE folder_id = $2`,
+        [folderId, destFolderId]
+      );
+      if (parseInt(cycleRes.rows[0].count) > 0) throw new Error('Cannot move folder into its own descendant');
+    }
+
+    const destId = destFolderId || null;
+    let newGoogleParent = TARGET_FOLDER_ID;
+    if (destId) {
+      const destRes = await client.query('SELECT google_folder_id FROM folders WHERE folder_id = $1', [destId]);
+      if (destRes.rows.length === 0) throw new Error('Destination folder not found');
+      newGoogleParent = destRes.rows[0].google_folder_id;
+    }
+
+    const drive = getDriveService();
+    await drive.files.update({
+      fileId: folder.google_folder_id,
+      addParents: newGoogleParent,
+      removeParents: folder.old_google_parent || TARGET_FOLDER_ID,
+      requestBody: {},
+    });
+
+    await client.query('UPDATE folders SET parent_id = $1 WHERE folder_id = $2', [destId, folderId]);
+    await logAction(userId, 'move', 'folder', folderId, { folder_name: folder.name });
+    await client.query('COMMIT');
+    res.json({ message: 'Folder moved successfully' });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── Feature 3: Starred / Favorites ──────────────────────────────────────────
+
+export const getStarredFiles = async (req: any, res: Response) => {
+  const { userId } = req.user;
+  try {
+    const { rows } = await pool.query(
+      `SELECT f.file_id AS id, f.file_name AS name, f.file_size, f.mime_type,
+              f.created_at, 'file' AS type, sf.starred_at
+       FROM starred_files sf
+       JOIN files f ON sf.file_id = f.file_id
+       WHERE sf.user_id = $1 AND f.status = 'active'
+       UNION
+       SELECT fo.folder_id AS id, fo.name, NULL AS file_size, NULL AS mime_type,
+              fo.created_at, 'folder' AS type, sf.starred_at
+       FROM starred_files sf
+       JOIN folders fo ON sf.folder_id = fo.folder_id
+       WHERE sf.user_id = $1 AND fo.status = 'active'
+       ORDER BY starred_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const starFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId } = req.user;
+  try {
+    await pool.query(
+      'INSERT INTO starred_files (user_id, file_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [userId, fileId]
+    );
+    res.json({ message: 'Starred' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+export const unstarFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId } = req.user;
+  try {
+    await pool.query('DELETE FROM starred_files WHERE user_id = $1 AND file_id = $2', [userId, fileId]);
+    res.json({ message: 'Unstarred' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+export const starFolder = async (req: any, res: Response) => {
+  const { folderId } = req.params;
+  const { userId } = req.user;
+  try {
+    await pool.query(
+      'INSERT INTO starred_files (user_id, folder_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [userId, folderId]
+    );
+    res.json({ message: 'Starred' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+export const unstarFolder = async (req: any, res: Response) => {
+  const { folderId } = req.params;
+  const { userId } = req.user;
+  try {
+    await pool.query('DELETE FROM starred_files WHERE user_id = $1 AND folder_id = $2', [userId, folderId]);
+    res.json({ message: 'Unstarred' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// ─── Feature 4: Copy File ─────────────────────────────────────────────────────
+
+export const copyFile = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId, role } = req.user;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const fileRes = await client.query(
+      `SELECT f.google_file_id, f.uploader_id, f.file_name, f.file_size,
+              f.mime_type, f.folder_id, fl.google_folder_id AS google_parent
+       FROM files f
+       LEFT JOIN folders fl ON f.folder_id = fl.folder_id
+       WHERE f.file_id = $1 AND f.status = 'active'`,
+      [fileId]
+    );
+    if (fileRes.rows.length === 0) throw new Error('File not found');
+    const file = fileRes.rows[0];
+
+    const hasPermission = role === 'admin' || role === 'manager' || file.uploader_id === userId;
+    if (!hasPermission) {
+      const permRes = await client.query(
+        "SELECT 1 FROM permissions WHERE file_id = $1 AND user_id = $2",
+        [fileId, userId]
+      );
+      if (permRes.rows.length === 0) throw new Error('Permission denied');
+    }
+
+    // Check quota
+    const userRes = await client.query('SELECT quota_bytes, used_bytes FROM users WHERE user_id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (BigInt(user.used_bytes) + BigInt(file.file_size) > BigInt(user.quota_bytes)) {
+      throw new Error('Quota exceeded');
+    }
+
+    // Generate unique copy name
+    const dotIdx = file.file_name.lastIndexOf('.');
+    const base = dotIdx > 0 ? file.file_name.slice(0, dotIdx) : file.file_name;
+    const ext = dotIdx > 0 ? file.file_name.slice(dotIdx) : '';
+    let copyName = `${base} (copy)${ext}`;
+    let counter = 2;
+    while (true) {
+      const exists = await client.query(
+        "SELECT 1 FROM files WHERE file_name = $1 AND folder_id IS NOT DISTINCT FROM $2 AND status = 'active'",
+        [copyName, file.folder_id]
+      );
+      if (exists.rows.length === 0) break;
+      copyName = `${base} (copy ${counter})${ext}`;
+      counter++;
+    }
+
+    const googleParent = file.google_parent || TARGET_FOLDER_ID;
+    const drive = getDriveService();
+    const copyRes = await drive.files.copy({
+      fileId: file.google_file_id,
+      requestBody: { name: copyName, parents: [googleParent] },
+    });
+
+    const insertRes = await client.query(
+      `INSERT INTO files (google_file_id, folder_id, uploader_id, file_name, file_size, mime_type, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active') RETURNING *`,
+      [copyRes.data.id, file.folder_id, userId, copyName, file.file_size, file.mime_type]
+    );
+    const newFile = insertRes.rows[0];
+
+    await client.query('UPDATE users SET used_bytes = used_bytes + $1, updated_at = NOW() WHERE user_id = $2', [file.file_size, userId]);
+    await logAction(userId, 'copy', 'file', newFile.file_id, { file_name: copyName, original_id: fileId });
+    await client.query('COMMIT');
+    res.status(201).json(newFile);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── Feature 5: File Info Panel ───────────────────────────────────────────────
+
+export const getFileInfo = async (req: any, res: Response) => {
+  const { fileId } = req.params;
+  const { userId, role } = req.user;
+  try {
+    const fileRes = await pool.query(
+      `SELECT f.file_id, f.file_name, f.file_size, f.mime_type, f.created_at,
+              f.folder_id, u.full_name AS uploader_name
+       FROM files f
+       JOIN users u ON f.uploader_id = u.user_id
+       WHERE f.file_id = $1 AND f.status = 'active'`,
+      [fileId]
+    );
+    if (fileRes.rows.length === 0) return res.status(404).json({ error: 'File not found' });
+    const file = fileRes.rows[0];
+
+    // Check access
+    if (role !== 'admin' && role !== 'manager') {
+      const permRes = await pool.query(
+        `SELECT 1 FROM files f
+         LEFT JOIN permissions p ON p.file_id = f.file_id
+         WHERE f.file_id = $1 AND (f.uploader_id = $2 OR (p.user_id = $2))`,
+        [fileId, userId]
+      );
+      if (permRes.rows.length === 0) return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    // Build folder path via recursive CTE
+    let folderPath = '';
+    if (file.folder_id) {
+      const pathRes = await pool.query(
+        `WITH RECURSIVE ancestors AS (
+           SELECT folder_id, name, parent_id FROM folders WHERE folder_id = $1
+           UNION ALL
+           SELECT f.folder_id, f.name, f.parent_id
+           FROM folders f JOIN ancestors a ON f.folder_id = a.parent_id
+         )
+         SELECT name FROM ancestors ORDER BY (SELECT COUNT(*) FROM ancestors a2 WHERE a2.folder_id = ancestors.folder_id) DESC`,
+        [file.folder_id]
+      );
+      folderPath = pathRes.rows.map((r: any) => r.name).join(' / ');
+    }
+
+    // Sharing info
+    const shareRes = await pool.query(
+      `SELECT u.full_name, p.access_level
+       FROM permissions p JOIN users u ON p.user_id = u.user_id
+       WHERE p.file_id = $1`,
+      [fileId]
+    );
+
+    // Recent activity (last 5)
+    const activityRes = await pool.query(
+      `SELECT al.action, al.created_at, u.full_name AS actor_name
+       FROM audit_logs al JOIN users u ON al.user_id = u.user_id
+       WHERE al.target_id = $1
+       ORDER BY al.created_at DESC LIMIT 5`,
+      [fileId]
+    );
+
+    res.json({
+      file_name: file.file_name,
+      file_size: file.file_size,
+      mime_type: file.mime_type,
+      created_at: file.created_at,
+      uploader_name: file.uploader_name,
+      folder_path: folderPath,
+      shared_with: shareRes.rows,
+      recent_activity: activityRes.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 };

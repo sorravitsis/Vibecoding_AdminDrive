@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import './styles/global.css';
@@ -12,6 +13,9 @@ import Login from './pages/Login';
 import Activity from './pages/Activity';
 import UsersManagement from './pages/UsersManagement';
 import Maintenance from './pages/Maintenance';
+import SharedWithMe from './pages/SharedWithMe';
+import StarredPage from './pages/Starred';
+import Profile from './pages/Profile';
 
 const ProtectedLayout = ({ children, roles }: { children: React.ReactNode, roles?: string[] }) => {
   const { isAuthenticated, user } = useAuth();
@@ -36,13 +40,13 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      
+
       <Route path="/" element={
         <ProtectedLayout>
           <Dashboard />
         </ProtectedLayout>
       } />
-      
+
       <Route path="/files" element={
         <ProtectedLayout>
           <Files />
@@ -58,6 +62,24 @@ function AppRoutes() {
       <Route path="/activity" element={
         <ProtectedLayout>
           <Activity />
+        </ProtectedLayout>
+      } />
+
+      <Route path="/shared" element={
+        <ProtectedLayout>
+          <SharedWithMe />
+        </ProtectedLayout>
+      } />
+
+      <Route path="/starred" element={
+        <ProtectedLayout>
+          <StarredPage />
+        </ProtectedLayout>
+      } />
+
+      <Route path="/profile" element={
+        <ProtectedLayout>
+          <Profile />
         </ProtectedLayout>
       } />
 
@@ -80,13 +102,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </ToastProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
