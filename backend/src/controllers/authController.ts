@@ -8,7 +8,7 @@ import { logAction } from '../utils/auditLogger';
 const TOKEN_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 
 export const loginValidation = [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail(),
   body('password').isString().isLength({ min: 1 }),
 ];
 
@@ -25,11 +25,12 @@ export const login = async (req: Request, res: Response) => {
   }
 
   const { email, password } = req.body;
+  const normalizedEmail = email.toLowerCase().trim();
 
   try {
     const { rows } = await pool.query(
       'SELECT user_id, email, full_name, role, token_version, status, password_hash FROM users WHERE email = $1',
-      [email]
+      [normalizedEmail]
     );
 
     const user = rows[0];
@@ -126,8 +127,8 @@ export const register = async (req: Request, res: Response) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await pool.query(
-      `INSERT INTO users (email, full_name, role, status, quota_bytes, used_bytes, password_hash)
-       VALUES ($1, $2, 'user', 'active', 5368709120, 0, $3)
+      `INSERT INTO users (email, full_name, role, status, quota_bytes, used_bytes, password_hash, token_version)
+       VALUES ($1, $2, 'user', 'active', 5368709120, 0, $3, 1)
        RETURNING user_id, email, full_name, role`,
       [email.toLowerCase().trim(), fullName.trim(), passwordHash]
     );

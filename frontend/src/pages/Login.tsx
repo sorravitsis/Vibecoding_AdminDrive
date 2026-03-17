@@ -56,9 +56,14 @@ const Login: React.FC = () => {
     try {
       await api.post('/auth/register', { email, fullName, password });
       setSuccess('Account created successfully! You can now sign in.');
+      const registeredEmail = email;
       setTimeout(() => {
-        switchMode('login');
-        setEmail(email);
+        setMode('login');
+        setPassword('');
+        setFullName('');
+        setError('');
+        setSuccess('');
+        setEmail(registeredEmail);
       }, 1500);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create account');
